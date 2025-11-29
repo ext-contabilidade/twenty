@@ -1,7 +1,10 @@
+import { assertUnreachable } from 'twenty-shared/utils';
+
 import {
   ConflictError,
   ForbiddenError,
   NotFoundError,
+  TimeoutError,
 } from 'src/engine/core-modules/graphql/utils/graphql-errors.util';
 import {
   ServerlessFunctionException,
@@ -21,12 +24,13 @@ export const serverlessFunctionGraphQLApiExceptionHandler = (error: any) => {
       case ServerlessFunctionExceptionCode.SERVERLESS_FUNCTION_BUILDING:
       case ServerlessFunctionExceptionCode.SERVERLESS_FUNCTION_EXECUTION_LIMIT_REACHED:
         throw new ForbiddenError(error);
+      case ServerlessFunctionExceptionCode.SERVERLESS_FUNCTION_EXECUTION_TIMEOUT:
+        throw new TimeoutError(error);
       case ServerlessFunctionExceptionCode.SERVERLESS_FUNCTION_CODE_UNCHANGED:
+      case ServerlessFunctionExceptionCode.SERVERLESS_FUNCTION_CREATE_FAILED:
         throw error;
       default: {
-        const _exhaustiveCheck: never = error.code;
-
-        throw error;
+        return assertUnreachable(error.code);
       }
     }
   }

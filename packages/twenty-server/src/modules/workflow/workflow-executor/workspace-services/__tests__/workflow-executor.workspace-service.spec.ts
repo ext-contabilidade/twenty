@@ -1,4 +1,4 @@
-import { Test, TestingModule } from '@nestjs/testing';
+import { Test, type TestingModule } from '@nestjs/testing';
 
 import { getWorkflowRunContext, StepStatus } from 'twenty-shared/workflow';
 
@@ -6,26 +6,28 @@ import { BILLING_FEATURE_USED } from 'src/engine/core-modules/billing/constants/
 import { BILLING_WORKFLOW_EXECUTION_ERROR_MESSAGE } from 'src/engine/core-modules/billing/constants/billing-workflow-execution-error-message.constant';
 import { BillingMeterEventName } from 'src/engine/core-modules/billing/enums/billing-meter-event-names';
 import { BillingService } from 'src/engine/core-modules/billing/services/billing.service';
+import { MessageQueue } from 'src/engine/core-modules/message-queue/message-queue.constants';
 import { WorkspaceEventEmitter } from 'src/engine/workspace-event-emitter/workspace-event-emitter';
 import { WorkflowActionFactory } from 'src/modules/workflow/workflow-executor/factories/workflow-action.factory';
+import { shouldExecuteStep } from 'src/modules/workflow/workflow-executor/utils/should-execute-step.util';
 import {
-  WorkflowAction,
+  type WorkflowAction,
   WorkflowActionType,
 } from 'src/modules/workflow/workflow-executor/workflow-actions/types/workflow-action.type';
 import { WorkflowExecutorWorkspaceService } from 'src/modules/workflow/workflow-executor/workspace-services/workflow-executor.workspace-service';
+import { WorkflowRunQueueWorkspaceService } from 'src/modules/workflow/workflow-runner/workflow-run-queue/workspace-services/workflow-run-queue.workspace-service';
 import { WorkflowRunWorkspaceService } from 'src/modules/workflow/workflow-runner/workflow-run/workflow-run.workspace-service';
-import { canExecuteStep } from 'src/modules/workflow/workflow-executor/utils/can-execute-step.util';
 
 jest.mock(
-  'src/modules/workflow/workflow-executor/utils/can-execute-step.util',
+  'src/modules/workflow/workflow-executor/utils/should-execute-step.util',
   () => {
     const actual = jest.requireActual(
-      'src/modules/workflow/workflow-executor/utils/can-execute-step.util',
+      'src/modules/workflow/workflow-executor/utils/should-execute-step.util',
     );
 
     return {
       ...actual,
-      canExecuteStep: jest.fn().mockReturnValue(true), // default behavior
+      shouldExecuteStep: jest.fn().mockReturnValue(true), // default behavior
     };
   },
 );
@@ -55,6 +57,14 @@ describe('WorkflowExecutorWorkspaceService', () => {
     canBillMeteredProduct: jest.fn().mockReturnValue(true),
   };
 
+  const mockMessageQueueService = {
+    add: jest.fn(),
+  };
+
+  const mockWorkflowRunQueueWorkspaceService = {
+    increaseWorkflowRunQueuedCount: jest.fn(),
+  };
+
   beforeEach(async () => {
     jest.clearAllMocks();
 
@@ -78,6 +88,14 @@ describe('WorkflowExecutorWorkspaceService', () => {
         {
           provide: BillingService,
           useValue: mockBillingService,
+        },
+        {
+          provide: `MESSAGE_QUEUE_${MessageQueue.workflowQueue}`,
+          useValue: mockMessageQueueService,
+        },
+        {
+          provide: WorkflowRunQueueWorkspaceService,
+          useValue: mockWorkflowRunQueueWorkspaceService,
         },
       ],
     }).compile();
@@ -132,6 +150,7 @@ describe('WorkflowExecutorWorkspaceService', () => {
 
     mockWorkflowRunWorkspaceService.getWorkflowRunOrFail.mockReturnValue({
       state: { flow: { steps: mockSteps }, stepInfos: mockStepInfos },
+      workflowId: 'workflow-id',
     });
 
     it('should execute a step and continue to the next step on success', async () => {
@@ -155,6 +174,10 @@ describe('WorkflowExecutorWorkspaceService', () => {
         currentStepId: 'step-1',
         steps: mockSteps,
         context: getWorkflowRunContext(mockStepInfos),
+        runInfo: {
+          workflowRunId: mockWorkflowRunId,
+          workspaceId: mockWorkspaceId,
+        },
       });
 
       expect(workspaceEventEmitter.emitCustomBatchEvent).toHaveBeenCalledWith(
@@ -163,6 +186,11 @@ describe('WorkflowExecutorWorkspaceService', () => {
           {
             eventName: BillingMeterEventName.WORKFLOW_NODE_RUN,
             value: 1,
+            dimensions: {
+              execution_type: 'workflow_execution',
+              resource_id: 'workflow-id',
+              execution_context_1: null,
+            },
           },
         ],
         'workspace-id',
@@ -321,7 +349,7 @@ describe('WorkflowExecutorWorkspaceService', () => {
     });
 
     it('should return if step should not be executed', async () => {
-      (canExecuteStep as jest.Mock).mockReturnValueOnce(false);
+      (shouldExecuteStep as jest.Mock).mockReturnValueOnce(false);
 
       await service.executeFromSteps({
         workflowRunId: mockWorkflowRunId,
@@ -331,11 +359,45 @@ describe('WorkflowExecutorWorkspaceService', () => {
 
       expect(workflowActionFactory.get).not.toHaveBeenCalled();
     });
+
+    it('should queue another job when max executed step count is reached', async () => {
+      const mockStepResult = {
+        result: { stepOutput: 'success' },
+      };
+
+      mockWorkflowExecutor.execute.mockResolvedValueOnce(mockStepResult);
+
+      await service.executeFromSteps({
+        workflowRunId: mockWorkflowRunId,
+        stepIds: ['step-1'],
+        workspaceId: mockWorkspaceId,
+        executedStepsCount: 21, // exceeds MAX_EXECUTED_STEPS_COUNT (20)
+      });
+
+      expect(mockMessageQueueService.add).toHaveBeenCalledWith(
+        'RunWorkflowJob',
+        {
+          workspaceId: mockWorkspaceId,
+          workflowRunId: mockWorkflowRunId,
+          lastExecutedStepId: 'step-1',
+        },
+      );
+
+      expect(
+        mockWorkflowRunQueueWorkspaceService.increaseWorkflowRunQueuedCount,
+      ).toHaveBeenCalledWith(mockWorkspaceId);
+
+      // Should not execute the next step (step-2) in the same job
+      expect(workflowActionFactory.get).toHaveBeenCalledTimes(1);
+      expect(workflowActionFactory.get).toHaveBeenCalledWith(
+        WorkflowActionType.CODE,
+      );
+    });
   });
 
   describe('sendWorkflowNodeRunEvent', () => {
     it('should emit a billing event', () => {
-      service['sendWorkflowNodeRunEvent']('workspace-id');
+      service['sendWorkflowNodeRunEvent']('workspace-id', 'workflow-id');
 
       expect(workspaceEventEmitter.emitCustomBatchEvent).toHaveBeenCalledWith(
         BILLING_FEATURE_USED,
@@ -343,6 +405,11 @@ describe('WorkflowExecutorWorkspaceService', () => {
           {
             eventName: BillingMeterEventName.WORKFLOW_NODE_RUN,
             value: 1,
+            dimensions: {
+              execution_type: 'workflow_execution',
+              resource_id: 'workflow-id',
+              execution_context_1: null,
+            },
           },
         ],
         'workspace-id',

@@ -1,26 +1,47 @@
-import { UseFilters, UseGuards, UsePipes } from '@nestjs/common';
-import { Resolver } from '@nestjs/graphql';
-import { InjectRepository } from '@nestjs/typeorm';
+import { UseGuards } from '@nestjs/common';
+import { Args, Mutation, Resolver } from '@nestjs/graphql';
 
-import { Repository } from 'typeorm';
+import GraphQLUpload from 'graphql-upload/GraphQLUpload.mjs';
 
-import { PreventNestToAutoLogGraphqlErrorsFilter } from 'src/engine/core-modules/graphql/filters/prevent-nest-to-auto-log-graphql-errors.filter';
-import { ResolverValidationPipe } from 'src/engine/core-modules/graphql/pipes/resolver-validation.pipe';
-import { UserWorkspace } from 'src/engine/core-modules/user-workspace/user-workspace.entity';
-import { UserWorkspaceService } from 'src/engine/core-modules/user-workspace/user-workspace.service';
-import { WorkspaceInvitationService } from 'src/engine/core-modules/workspace-invitation/services/workspace-invitation.service';
-import { Workspace } from 'src/engine/core-modules/workspace/workspace.entity';
+import { FileFolder } from 'src/engine/core-modules/file/interfaces/file-folder.interface';
+
+import type { FileUpload } from 'graphql-upload/processRequest.mjs';
+
+import { SignedFileDTO } from 'src/engine/core-modules/file/file-upload/dtos/signed-file.dto';
+import { FileUploadService } from 'src/engine/core-modules/file/file-upload/services/file-upload.service';
+import { WorkspaceEntity } from 'src/engine/core-modules/workspace/workspace.entity';
+import { AuthWorkspace } from 'src/engine/decorators/auth/auth-workspace.decorator';
+import { SettingsPermissionGuard } from 'src/engine/guards/settings-permission.guard';
 import { WorkspaceAuthGuard } from 'src/engine/guards/workspace-auth.guard';
+import { PermissionFlagType } from 'src/engine/metadata-modules/permissions/constants/permission-flag-type.constants';
+import { streamToBuffer } from 'src/utils/stream-to-buffer';
 
-@UseGuards(WorkspaceAuthGuard)
-@Resolver(() => UserWorkspace)
-@UsePipes(ResolverValidationPipe)
-@UseFilters(PreventNestToAutoLogGraphqlErrorsFilter)
+@Resolver()
 export class UserWorkspaceResolver {
-  constructor(
-    @InjectRepository(Workspace, 'core')
-    private readonly workspaceRepository: Repository<Workspace>,
-    private readonly userWorkspaceService: UserWorkspaceService,
-    private readonly workspaceInvitationService: WorkspaceInvitationService,
-  ) {}
+  constructor(private readonly fileUploadService: FileUploadService) {}
+
+  @Mutation(() => SignedFileDTO)
+  @UseGuards(
+    WorkspaceAuthGuard,
+    SettingsPermissionGuard(PermissionFlagType.WORKSPACE_MEMBERS),
+  )
+  async uploadWorkspaceMemberProfilePicture(
+    @AuthWorkspace() { id: workspaceId }: WorkspaceEntity,
+    @Args({ name: 'file', type: () => GraphQLUpload })
+    { createReadStream, filename, mimetype }: FileUpload,
+  ): Promise<SignedFileDTO> {
+    const stream = createReadStream();
+    const buffer = await streamToBuffer(stream);
+    const fileFolder = FileFolder.ProfilePicture;
+
+    const { files } = await this.fileUploadService.uploadImage({
+      file: buffer,
+      filename,
+      mimeType: mimetype,
+      fileFolder,
+      workspaceId,
+    });
+
+    return files[0];
+  }
 }

@@ -10,7 +10,7 @@ import { isSyncStale } from 'src/modules/calendar/calendar-event-import-manager/
 import { CalendarChannelSyncStatusService } from 'src/modules/calendar/common/services/calendar-channel-sync-status.service';
 import {
   CalendarChannelSyncStage,
-  CalendarChannelWorkspaceEntity,
+  type CalendarChannelWorkspaceEntity,
 } from 'src/modules/calendar/common/standard-objects/calendar-channel.workspace-entity';
 
 export type CalendarOngoingStaleJobData = {
@@ -39,6 +39,8 @@ export class CalendarOngoingStaleJob {
         syncStage: In([
           CalendarChannelSyncStage.CALENDAR_EVENTS_IMPORT_ONGOING,
           CalendarChannelSyncStage.CALENDAR_EVENT_LIST_FETCH_ONGOING,
+          CalendarChannelSyncStage.CALENDAR_EVENTS_IMPORT_SCHEDULED,
+          CalendarChannelSyncStage.CALENDAR_EVENT_LIST_FETCH_SCHEDULED,
         ]),
       },
     });
@@ -54,11 +56,13 @@ export class CalendarOngoingStaleJob {
 
         switch (calendarChannel.syncStage) {
           case CalendarChannelSyncStage.CALENDAR_EVENT_LIST_FETCH_ONGOING:
-            await this.calendarChannelSyncStatusService.schedulePartialCalendarEventListFetch(
+          case CalendarChannelSyncStage.CALENDAR_EVENT_LIST_FETCH_SCHEDULED:
+            await this.calendarChannelSyncStatusService.scheduleCalendarEventListFetch(
               [calendarChannel.id],
             );
             break;
           case CalendarChannelSyncStage.CALENDAR_EVENTS_IMPORT_ONGOING:
+          case CalendarChannelSyncStage.CALENDAR_EVENTS_IMPORT_SCHEDULED:
             await this.calendarChannelSyncStatusService.scheduleCalendarEventsImport(
               [calendarChannel.id],
             );

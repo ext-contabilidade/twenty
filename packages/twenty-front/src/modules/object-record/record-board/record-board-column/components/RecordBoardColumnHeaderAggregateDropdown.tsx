@@ -1,17 +1,18 @@
 import { useDropdownContextCurrentContentId } from '@/dropdown-context-state-management/hooks/useDropdownContextCurrentContentId';
-import { ObjectMetadataItem } from '@/object-metadata/types/ObjectMetadataItem';
+import { type ObjectMetadataItem } from '@/object-metadata/types/ObjectMetadataItem';
 import { RecordBoardColumnHeaderAggregateDropdownComponentInstanceContext } from '@/object-record/record-board/contexts/RecordBoardColumnHeaderAggregateDropdownComponentInstanceContext';
 import { RecordBoardColumnHeaderAggregateDropdownButton } from '@/object-record/record-board/record-board-column/components/RecordBoardColumnHeaderAggregateDropdownButton';
 import { AggregateDropdownContent } from '@/object-record/record-board/record-board-column/components/RecordBoardColumnHeaderAggregateDropdownContent';
 import { RecordBoardColumnHeaderAggregateDropdownContext } from '@/object-record/record-board/record-board-column/components/RecordBoardColumnHeaderAggregateDropdownContext';
-import { RecordBoardColumnHeaderAggregateContentId } from '@/object-record/record-board/types/RecordBoardColumnHeaderAggregateContentId';
+import { type RecordBoardColumnHeaderAggregateContentId } from '@/object-record/record-board/types/RecordBoardColumnHeaderAggregateContentId';
 import { Dropdown } from '@/ui/layout/dropdown/components/Dropdown';
 import { DROPDOWN_OFFSET_Y } from '@/ui/layout/dropdown/constants/DropdownOffsetY';
 import styled from '@emotion/styled';
+import { type Nullable } from 'twenty-shared/types';
 
 type RecordBoardColumnHeaderAggregateDropdownProps = {
-  aggregateValue?: string | number;
-  aggregateLabel?: string;
+  aggregateValue?: Nullable<string | number>;
+  aggregateLabel?: Nullable<string>;
   objectMetadataItem: ObjectMetadataItem;
   dropdownId: string;
 };

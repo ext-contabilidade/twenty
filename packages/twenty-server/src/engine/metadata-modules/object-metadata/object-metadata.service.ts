@@ -1,521 +1,581 @@
 import { Injectable } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 
-import { Query, QueryOptions } from '@ptc-org/nestjs-query-core';
 import { TypeOrmQueryService } from '@ptc-org/nestjs-query-typeorm';
-import { capitalize, isDefined } from 'twenty-shared/utils';
-import {
-  FindManyOptions,
-  FindOneOptions,
-  In,
-  QueryRunner,
-  Repository,
-} from 'typeorm';
-import { FieldMetadataType } from 'twenty-shared/types';
+import { fromArrayToUniqueKeyRecord, isDefined } from 'twenty-shared/utils';
+import { FindManyOptions, FindOneOptions, Repository } from 'typeorm';
 
-import { DataSourceService } from 'src/engine/metadata-modules/data-source/data-source.service';
-import { FieldMetadataEntity } from 'src/engine/metadata-modules/field-metadata/field-metadata.entity';
-import { IndexMetadataService } from 'src/engine/metadata-modules/index-metadata/index-metadata.service';
+import { ApplicationService } from 'src/engine/core-modules/application/application.service';
+import { WorkspaceManyOrAllFlatEntityMapsCacheService } from 'src/engine/metadata-modules/flat-entity/services/workspace-many-or-all-flat-entity-maps-cache.service';
+import { computeFlatEntityMapsFromTo } from 'src/engine/metadata-modules/flat-entity/utils/compute-flat-entity-maps-from-to.util';
+import { findManyFlatEntityByIdInFlatEntityMapsOrThrow } from 'src/engine/metadata-modules/flat-entity/utils/find-many-flat-entity-by-id-in-flat-entity-maps-or-throw.util';
+import { FlatFieldMetadata } from 'src/engine/metadata-modules/flat-field-metadata/types/flat-field-metadata.type';
+import { FlatIndexMetadata } from 'src/engine/metadata-modules/flat-index-metadata/types/flat-index-metadata.type';
+import { FlatObjectMetadata } from 'src/engine/metadata-modules/flat-object-metadata/types/flat-object-metadata.type';
+import { fromCreateObjectInputToFlatObjectMetadataAndFlatFieldMetadatasToCreate } from 'src/engine/metadata-modules/flat-object-metadata/utils/from-create-object-input-to-flat-object-metadata-and-flat-field-metadatas-to-create.util';
+import { fromDeleteObjectInputToFlatFieldMetadatasToDelete } from 'src/engine/metadata-modules/flat-object-metadata/utils/from-delete-object-input-to-flat-field-metadatas-to-delete.util';
+import { fromUpdateObjectInputToFlatObjectMetadataAndRelatedFlatEntities } from 'src/engine/metadata-modules/flat-object-metadata/utils/from-update-object-input-to-flat-object-metadata-and-related-flat-entities.util';
+import { fromCreateViewFieldInputToFlatViewFieldToCreate } from 'src/engine/metadata-modules/flat-view-field/utils/from-create-view-field-input-to-flat-view-field-to-create.util';
+import { FlatView } from 'src/engine/metadata-modules/flat-view/types/flat-view.type';
+import { fromCreateViewInputToFlatViewToCreate } from 'src/engine/metadata-modules/flat-view/utils/from-create-view-input-to-flat-view-to-create.util';
+import { CreateObjectInput } from 'src/engine/metadata-modules/object-metadata/dtos/create-object.input';
 import { DeleteOneObjectInput } from 'src/engine/metadata-modules/object-metadata/dtos/delete-object.input';
-import {
-  UpdateObjectPayload,
-  UpdateOneObjectInput,
-} from 'src/engine/metadata-modules/object-metadata/dtos/update-object.input';
+import { UpdateOneObjectInput } from 'src/engine/metadata-modules/object-metadata/dtos/update-object.input';
+import { ObjectMetadataEntity } from 'src/engine/metadata-modules/object-metadata/object-metadata.entity';
 import {
   ObjectMetadataException,
   ObjectMetadataExceptionCode,
 } from 'src/engine/metadata-modules/object-metadata/object-metadata.exception';
-import { ObjectMetadataFieldRelationService } from 'src/engine/metadata-modules/object-metadata/services/object-metadata-field-relation.service';
-import { ObjectMetadataMigrationService } from 'src/engine/metadata-modules/object-metadata/services/object-metadata-migration.service';
-import { ObjectMetadataRelatedRecordsService } from 'src/engine/metadata-modules/object-metadata/services/object-metadata-related-records.service';
-import { buildDefaultFieldsForCustomObject } from 'src/engine/metadata-modules/object-metadata/utils/build-default-fields-for-custom-object.util';
-import {
-  validateLowerCasedAndTrimmedStringsAreDifferentOrThrow,
-  validateObjectMetadataInputLabelsOrThrow,
-  validateObjectMetadataInputNamesOrThrow,
-} from 'src/engine/metadata-modules/object-metadata/utils/validate-object-metadata-input.util';
-import { SearchVectorService } from 'src/engine/metadata-modules/search-vector/search-vector.service';
-import { ObjectMetadataItemWithFieldMaps } from 'src/engine/metadata-modules/types/object-metadata-item-with-field-maps';
-import { validateMetadataIdentifierFieldMetadataIds } from 'src/engine/metadata-modules/utils/validate-metadata-identifier-field-metadata-id.utils';
-import { validateNameAndLabelAreSyncOrThrow } from 'src/engine/metadata-modules/utils/validate-name-and-label-are-sync-or-throw.util';
-import { validatesNoOtherObjectWithSameNameExistsOrThrows } from 'src/engine/metadata-modules/utils/validate-no-other-object-with-same-name-exists-or-throw.util';
-import { WorkspaceMetadataCacheService } from 'src/engine/metadata-modules/workspace-metadata-cache/services/workspace-metadata-cache.service';
-import { WorkspaceMetadataVersionService } from 'src/engine/metadata-modules/workspace-metadata-version/services/workspace-metadata-version.service';
+import { ViewKey } from 'src/engine/metadata-modules/view/enums/view-key.enum';
+import { ViewType } from 'src/engine/metadata-modules/view/enums/view-type.enum';
 import { WorkspacePermissionsCacheService } from 'src/engine/metadata-modules/workspace-permissions-cache/workspace-permissions-cache.service';
-import { computeObjectTargetTable } from 'src/engine/utils/compute-object-target-table.util';
-import { WorkspaceDataSourceService } from 'src/engine/workspace-datasource/workspace-datasource.service';
-import { WorkspaceMigrationRunnerService } from 'src/engine/workspace-manager/workspace-migration-runner/workspace-migration-runner.service';
-import { CUSTOM_OBJECT_STANDARD_FIELD_IDS } from 'src/engine/workspace-manager/workspace-sync-metadata/constants/standard-field-ids';
-import { isSearchableFieldType } from 'src/engine/workspace-manager/workspace-sync-metadata/utils/is-searchable-field.util';
-import { isFieldMetadataEntityOfType } from 'src/engine/utils/is-field-metadata-of-type.util';
-
-import { ObjectMetadataEntity } from './object-metadata.entity';
-
-import { CreateObjectInput } from './dtos/create-object.input';
+import { TwentyORMGlobalManager } from 'src/engine/twenty-orm/twenty-orm-global.manager';
+import { DEFAULT_VIEW_FIELD_SIZE } from 'src/engine/workspace-manager/standard-objects-prefill-data/views/constants/DEFAULT_VIEW_FIELD_SIZE';
+import { WorkspaceMigrationBuilderExceptionV2 } from 'src/engine/workspace-manager/workspace-migration-v2/exceptions/workspace-migration-builder-exception-v2';
+import { WorkspaceMigrationValidateBuildAndRunService } from 'src/engine/workspace-manager/workspace-migration-v2/services/workspace-migration-validate-build-and-run-service';
+import { FavoriteWorkspaceEntity } from 'src/modules/favorite/standard-objects/favorite.workspace-entity';
 
 @Injectable()
 export class ObjectMetadataService extends TypeOrmQueryService<ObjectMetadataEntity> {
   constructor(
-    @InjectRepository(ObjectMetadataEntity, 'core')
+    @InjectRepository(ObjectMetadataEntity)
     private readonly objectMetadataRepository: Repository<ObjectMetadataEntity>,
-
-    private readonly dataSourceService: DataSourceService,
-    private readonly workspaceMetadataCacheService: WorkspaceMetadataCacheService,
-    private readonly workspaceMigrationRunnerService: WorkspaceMigrationRunnerService,
-    private readonly workspaceMetadataVersionService: WorkspaceMetadataVersionService,
-    private readonly searchVectorService: SearchVectorService,
-    private readonly objectMetadataFieldRelationService: ObjectMetadataFieldRelationService,
-    private readonly objectMetadataMigrationService: ObjectMetadataMigrationService,
-    private readonly objectMetadataRelatedRecordsService: ObjectMetadataRelatedRecordsService,
-    private readonly indexMetadataService: IndexMetadataService,
+    private readonly flatEntityMapsCacheService: WorkspaceManyOrAllFlatEntityMapsCacheService,
+    private readonly workspaceMigrationValidateBuildAndRunService: WorkspaceMigrationValidateBuildAndRunService,
     private readonly workspacePermissionsCacheService: WorkspacePermissionsCacheService,
-    private readonly workspaceDataSourceService: WorkspaceDataSourceService,
+    private readonly twentyORMGlobalManager: TwentyORMGlobalManager,
+    private readonly applicationService: ApplicationService,
   ) {
     super(objectMetadataRepository);
   }
 
-  override async query(
-    query: Query<ObjectMetadataEntity>,
-    opts?: QueryOptions<ObjectMetadataEntity> | undefined,
-  ): Promise<ObjectMetadataEntity[]> {
-    const start = performance.now();
+  async updateOneObject({
+    updateObjectInput,
+    workspaceId,
+  }: {
+    workspaceId: string;
+    updateObjectInput: UpdateOneObjectInput;
+  }): Promise<FlatObjectMetadata> {
+    const {
+      flatObjectMetadataMaps: existingFlatObjectMetadataMaps,
+      flatIndexMaps: existingFlatIndexMaps,
+      flatFieldMetadataMaps: existingFlatFieldMetadataMaps,
+      flatViewFieldMaps: existingFlatViewFieldMaps,
+      flatViewMaps: existingFlatViewMaps,
+    } = await this.flatEntityMapsCacheService.getOrRecomputeManyOrAllFlatEntityMaps(
+      {
+        workspaceId,
+        flatMapsKeys: [
+          'flatObjectMetadataMaps',
+          'flatIndexMaps',
+          'flatFieldMetadataMaps',
+          'flatViewFieldMaps',
+          'flatViewMaps',
+        ],
+      },
+    );
 
-    const result = super.query(query, opts);
+    const {
+      otherObjectFlatFieldMetadatasToUpdate,
+      flatObjectMetadataToUpdate,
+      flatIndexMetadatasToUpdate,
+      flatViewFieldsToCreate,
+      flatViewFieldsToUpdate,
+    } = fromUpdateObjectInputToFlatObjectMetadataAndRelatedFlatEntities({
+      flatFieldMetadataMaps: existingFlatFieldMetadataMaps,
+      flatObjectMetadataMaps: existingFlatObjectMetadataMaps,
+      updateObjectInput,
+      flatIndexMaps: existingFlatIndexMaps,
+      flatViewFieldMaps: existingFlatViewFieldMaps,
+      flatViewMaps: existingFlatViewMaps,
+    });
 
-    const end = performance.now();
-
-    // eslint-disable-next-line no-console
-    console.log(`metadata query time: ${end - start} ms`);
-
-    return result;
-  }
-
-  override async createOne(
-    objectMetadataInput: CreateObjectInput,
-  ): Promise<ObjectMetadataEntity> {
-    const mainDataSource =
-      await this.workspaceDataSourceService.connectToMainDataSource();
-    const queryRunner = mainDataSource.createQueryRunner();
-
-    await queryRunner.connect();
-    await queryRunner.startTransaction();
-
-    try {
-      const objectMetadataRepository =
-        queryRunner.manager.getRepository(ObjectMetadataEntity);
-
-      const { objectMetadataMaps } =
-        await this.workspaceMetadataCacheService.getExistingOrRecomputeMetadataMaps(
-          {
-            workspaceId: objectMetadataInput.workspaceId,
+    const validateAndBuildResult =
+      await this.workspaceMigrationValidateBuildAndRunService.validateBuildAndRunWorkspaceMigration(
+        {
+          fromToAllFlatEntityMaps: {
+            flatObjectMetadataMaps: computeFlatEntityMapsFromTo({
+              flatEntityMaps: existingFlatObjectMetadataMaps,
+              flatEntityToCreate: [],
+              flatEntityToDelete: [],
+              flatEntityToUpdate: [flatObjectMetadataToUpdate],
+            }),
+            flatIndexMaps: computeFlatEntityMapsFromTo({
+              flatEntityMaps: existingFlatIndexMaps,
+              flatEntityToCreate: [],
+              flatEntityToDelete: [],
+              flatEntityToUpdate: flatIndexMetadatasToUpdate,
+            }),
+            flatFieldMetadataMaps: computeFlatEntityMapsFromTo({
+              flatEntityMaps: existingFlatFieldMetadataMaps,
+              flatEntityToCreate: [],
+              flatEntityToDelete: [],
+              flatEntityToUpdate: otherObjectFlatFieldMetadatasToUpdate,
+            }),
+            flatViewFieldMaps: computeFlatEntityMapsFromTo({
+              flatEntityMaps: existingFlatViewFieldMaps,
+              flatEntityToCreate: flatViewFieldsToCreate,
+              flatEntityToDelete: [],
+              flatEntityToUpdate: flatViewFieldsToUpdate,
+            }),
           },
-        );
-
-      const lastDataSourceMetadata =
-        await this.dataSourceService.getLastDataSourceMetadataFromWorkspaceIdOrFail(
-          objectMetadataInput.workspaceId,
-        );
-
-      objectMetadataInput.labelSingular = capitalize(
-        objectMetadataInput.labelSingular,
-      );
-      objectMetadataInput.labelPlural = capitalize(
-        objectMetadataInput.labelPlural,
-      );
-
-      validateObjectMetadataInputNamesOrThrow(objectMetadataInput);
-      validateObjectMetadataInputLabelsOrThrow(objectMetadataInput);
-
-      validateLowerCasedAndTrimmedStringsAreDifferentOrThrow({
-        inputs: [
-          objectMetadataInput.nameSingular,
-          objectMetadataInput.namePlural,
-        ],
-        message:
-          'The singular and plural names cannot be the same for an object',
-      });
-      validateLowerCasedAndTrimmedStringsAreDifferentOrThrow({
-        inputs: [
-          objectMetadataInput.labelPlural,
-          objectMetadataInput.labelSingular,
-        ],
-        message:
-          'The singular and plural labels cannot be the same for an object',
-      });
-
-      if (objectMetadataInput.isLabelSyncedWithName === true) {
-        validateNameAndLabelAreSyncOrThrow(
-          objectMetadataInput.labelSingular,
-          objectMetadataInput.nameSingular,
-        );
-        validateNameAndLabelAreSyncOrThrow(
-          objectMetadataInput.labelPlural,
-          objectMetadataInput.namePlural,
-        );
-      }
-
-      validatesNoOtherObjectWithSameNameExistsOrThrows({
-        objectMetadataNamePlural: objectMetadataInput.namePlural,
-        objectMetadataNameSingular: objectMetadataInput.nameSingular,
-        objectMetadataMaps,
-      });
-
-      const baseCustomFields = buildDefaultFieldsForCustomObject(
-        objectMetadataInput.workspaceId,
-      );
-
-      const labelIdentifierFieldMetadataId = baseCustomFields.find(
-        (field) => field.standardId === CUSTOM_OBJECT_STANDARD_FIELD_IDS.name,
-      )?.id;
-
-      if (!labelIdentifierFieldMetadataId) {
-        throw new ObjectMetadataException(
-          'Label identifier field metadata not created properly',
-          ObjectMetadataExceptionCode.MISSING_CUSTOM_OBJECT_DEFAULT_LABEL_IDENTIFIER_FIELD,
-        );
-      }
-
-      const createdObjectMetadata = await objectMetadataRepository.save({
-        ...objectMetadataInput,
-        dataSourceId: lastDataSourceMetadata.id,
-        targetTableName: 'DEPRECATED',
-        isActive: true,
-        isCustom: !objectMetadataInput.isRemote,
-        isSystem: false,
-        isRemote: objectMetadataInput.isRemote,
-        isSearchable: !objectMetadataInput.isRemote,
-        fields: objectMetadataInput.isRemote ? [] : baseCustomFields,
-        labelIdentifierFieldMetadataId,
-      });
-
-      if (objectMetadataInput.isRemote) {
-        throw new Error('Remote objects are not supported yet');
-      } else {
-        const createdRelatedObjectMetadataCollection =
-          await this.objectMetadataFieldRelationService.createRelationsAndForeignKeysMetadata(
-            objectMetadataInput.workspaceId,
-            createdObjectMetadata,
-            objectMetadataMaps,
-            queryRunner,
-          );
-
-        await this.objectMetadataMigrationService.createTableMigration(
-          createdObjectMetadata,
-          queryRunner,
-        );
-
-        await this.objectMetadataMigrationService.createColumnsMigrations(
-          createdObjectMetadata,
-          createdObjectMetadata.fields,
-          queryRunner,
-        );
-
-        await this.objectMetadataMigrationService.createRelationMigrations(
-          createdObjectMetadata,
-          createdRelatedObjectMetadataCollection,
-          queryRunner,
-        );
-
-        await this.searchVectorService.createSearchVectorFieldForObject(
-          objectMetadataInput,
-          createdObjectMetadata,
-          queryRunner,
-        );
-      }
-
-      await this.workspaceMigrationRunnerService.executeMigrationFromPendingMigrationsWithinTransaction(
-        createdObjectMetadata.workspaceId,
-        queryRunner,
-      );
-
-      await queryRunner.commitTransaction();
-
-      // After commit, do non-transactional work
-      await this.workspacePermissionsCacheService.recomputeRolesPermissionsCache(
-        {
-          workspaceId: objectMetadataInput.workspaceId,
+          dependencyAllFlatEntityMaps: {
+            flatViewMaps: existingFlatViewMaps,
+          },
+          buildOptions: {
+            isSystemBuild: false,
+          },
+          workspaceId,
         },
       );
-      await this.objectMetadataRelatedRecordsService.createObjectRelatedRecords(
-        createdObjectMetadata,
-      );
 
-      await this.workspaceMetadataVersionService.incrementMetadataVersion(
-        objectMetadataInput.workspaceId,
+    if (isDefined(validateAndBuildResult)) {
+      throw new WorkspaceMigrationBuilderExceptionV2(
+        validateAndBuildResult,
+        'Multiple validation errors occurred while updating object',
       );
-
-      return createdObjectMetadata;
-    } catch (error) {
-      if (queryRunner.isTransactionActive) {
-        await queryRunner.rollbackTransaction();
-      }
-      throw error;
-    } finally {
-      await queryRunner.release();
     }
+
+    const { flatObjectMetadataMaps: recomputedFlatObjectMetadataMaps } =
+      await this.flatEntityMapsCacheService.getOrRecomputeManyOrAllFlatEntityMaps(
+        {
+          workspaceId,
+          flatMapsKeys: ['flatObjectMetadataMaps'],
+        },
+      );
+
+    const updatedFlatObjectMetadata =
+      recomputedFlatObjectMetadataMaps.byId[flatObjectMetadataToUpdate.id];
+
+    if (!isDefined(updatedFlatObjectMetadata)) {
+      throw new ObjectMetadataException(
+        'Updated object metadata not found in recomputed cache',
+        ObjectMetadataExceptionCode.INTERNAL_SERVER_ERROR,
+      );
+    }
+
+    if (isDefined(updateObjectInput.update.labelIdentifierFieldMetadataId)) {
+      await this.workspacePermissionsCacheService.recomputeRolesPermissionsCache(
+        {
+          workspaceId,
+        },
+      );
+    }
+
+    return updatedFlatObjectMetadata;
   }
 
-  public async updateOneObject(
-    input: UpdateOneObjectInput,
-    workspaceId: string,
-  ): Promise<ObjectMetadataEntity> {
-    const mainDataSource =
-      await this.workspaceDataSourceService.connectToMainDataSource();
-    const queryRunner = mainDataSource.createQueryRunner();
+  async deleteOneObject({
+    deleteObjectInput,
+    workspaceId,
+    isSystemBuild = false,
+  }: {
+    deleteObjectInput: DeleteOneObjectInput;
+    workspaceId: string;
+    isSystemBuild?: boolean;
+  }): Promise<FlatObjectMetadata> {
+    const deletedObjectMetadataDtos = await this.deleteManyObjectMetadatas({
+      deleteObjectInputs: [deleteObjectInput],
+      workspaceId,
+      isSystemBuild,
+    });
 
-    await queryRunner.connect();
-    await queryRunner.startTransaction();
+    if (deletedObjectMetadataDtos.length !== 1) {
+      throw new ObjectMetadataException(
+        'Could not retrieve deleted object metadata dto',
+        ObjectMetadataExceptionCode.INTERNAL_SERVER_ERROR,
+      );
+    }
 
-    try {
-      const objectMetadataRepository =
-        queryRunner.manager.getRepository(ObjectMetadataEntity);
+    const [deletedObjectMetadataDto] = deletedObjectMetadataDtos;
 
-      const { objectMetadataMaps } =
-        await this.workspaceMetadataCacheService.getExistingOrRecomputeMetadataMaps(
-          { workspaceId },
-        );
-      const inputId = input.id;
-      const inputPayload = {
-        ...input.update,
-        ...(isDefined(input.update.labelSingular)
-          ? { labelSingular: capitalize(input.update.labelSingular) }
-          : {}),
-        ...(isDefined(input.update.labelPlural)
-          ? { labelPlural: capitalize(input.update.labelPlural) }
-          : {}),
-      };
+    return deletedObjectMetadataDto;
+  }
 
-      validateObjectMetadataInputNamesOrThrow(inputPayload);
-      const existingObjectMetadata = objectMetadataMaps.byId[inputId];
+  private async deleteManyObjectMetadatas({
+    workspaceId,
+    deleteObjectInputs,
+    isSystemBuild = false,
+  }: {
+    deleteObjectInputs: DeleteOneObjectInput[];
+    workspaceId: string;
+    isSystemBuild?: boolean;
+  }): Promise<FlatObjectMetadata[]> {
+    if (deleteObjectInputs.length === 0) {
+      return [];
+    }
 
-      if (!existingObjectMetadata) {
-        throw new ObjectMetadataException(
-          'Object does not exist',
-          ObjectMetadataExceptionCode.OBJECT_METADATA_NOT_FOUND,
-        );
-      }
-      const existingObjectMetadataCombinedWithUpdateInput = {
-        ...existingObjectMetadata,
-        ...inputPayload,
-      };
-
-      validatesNoOtherObjectWithSameNameExistsOrThrows({
-        objectMetadataNameSingular:
-          existingObjectMetadataCombinedWithUpdateInput.nameSingular,
-        objectMetadataNamePlural:
-          existingObjectMetadataCombinedWithUpdateInput.namePlural,
-        existingObjectMetadataId:
-          existingObjectMetadataCombinedWithUpdateInput.id,
-        objectMetadataMaps,
-      });
-      if (existingObjectMetadataCombinedWithUpdateInput.isLabelSyncedWithName) {
-        validateNameAndLabelAreSyncOrThrow(
-          existingObjectMetadataCombinedWithUpdateInput.labelSingular,
-          existingObjectMetadataCombinedWithUpdateInput.nameSingular,
-        );
-        validateNameAndLabelAreSyncOrThrow(
-          existingObjectMetadataCombinedWithUpdateInput.labelPlural,
-          existingObjectMetadataCombinedWithUpdateInput.namePlural,
-        );
-      }
-      if (
-        isDefined(inputPayload.nameSingular) ||
-        isDefined(inputPayload.namePlural)
-      ) {
-        validateLowerCasedAndTrimmedStringsAreDifferentOrThrow({
-          inputs: [
-            existingObjectMetadataCombinedWithUpdateInput.nameSingular,
-            existingObjectMetadataCombinedWithUpdateInput.namePlural,
+    const { flatObjectMetadataMaps, flatFieldMetadataMaps, flatIndexMaps } =
+      await this.flatEntityMapsCacheService.getOrRecomputeManyOrAllFlatEntityMaps(
+        {
+          workspaceId,
+          flatMapsKeys: [
+            'flatObjectMetadataMaps',
+            'flatIndexMaps',
+            'flatFieldMetadataMaps',
           ],
-          message:
-            'The singular and plural names cannot be the same for an object',
-        });
-      }
-      validateMetadataIdentifierFieldMetadataIds({
-        fieldMetadataItems: Object.values(existingObjectMetadata.fieldsById),
-        labelIdentifierFieldMetadataId:
-          inputPayload.labelIdentifierFieldMetadataId,
-        imageIdentifierFieldMetadataId:
-          inputPayload.imageIdentifierFieldMetadataId,
-      });
-      const updatedObject = await objectMetadataRepository.save({
-        ...existingObjectMetadata,
-        ...inputPayload,
-      });
-
-      const { didUpdateLabelOrIcon } =
-        await this.handleObjectNameAndLabelUpdates(
-          existingObjectMetadata,
-          existingObjectMetadataCombinedWithUpdateInput,
-          inputPayload,
-          queryRunner,
-        );
-
-      await this.workspaceMigrationRunnerService.executeMigrationFromPendingMigrationsWithinTransaction(
-        workspaceId,
-        queryRunner,
+        },
       );
-      if (inputPayload.labelIdentifierFieldMetadataId) {
-        const labelIdentifierFieldMetadata =
-          existingObjectMetadata.fieldsById[
-            inputPayload.labelIdentifierFieldMetadataId
-          ];
 
-        if (isSearchableFieldType(labelIdentifierFieldMetadata.type)) {
-          await this.searchVectorService.updateSearchVector(
-            inputId,
-            [
-              {
-                name: labelIdentifierFieldMetadata.name,
-                type: labelIdentifierFieldMetadata.type,
-              },
-            ],
-            workspaceId,
-            queryRunner,
-          );
-        }
-        await this.workspaceMigrationRunnerService.executeMigrationFromPendingMigrationsWithinTransaction(
-          workspaceId,
-          queryRunner,
-        );
-      }
+    const initialAccumulator: {
+      flatFieldMetadatasToDeleteById: Record<string, FlatFieldMetadata>;
+      flatObjectMetadatasToDeleteById: Record<string, FlatObjectMetadata>;
+      flatIndexToDeleteById: Record<string, FlatIndexMetadata>;
+    } = {
+      flatFieldMetadatasToDeleteById: {},
+      flatIndexToDeleteById: {},
+      flatObjectMetadatasToDeleteById: {},
+    };
 
-      await queryRunner.commitTransaction();
+    const {
+      flatFieldMetadatasToDeleteById,
+      flatIndexToDeleteById,
+      flatObjectMetadatasToDeleteById,
+    } = deleteObjectInputs.reduce((accumulator, deleteObjectInput) => {
+      const {
+        flatFieldMetadatasToDelete,
+        flatObjectMetadataToDelete,
+        flatIndexToDelete,
+      } = fromDeleteObjectInputToFlatFieldMetadatasToDelete({
+        flatObjectMetadataMaps,
+        flatIndexMaps,
+        flatFieldMetadataMaps,
+        deleteObjectInput,
+      });
 
-      // After commit, do non-transactional work
-      await this.workspacePermissionsCacheService.recomputeRolesPermissionsCache(
+      return {
+        flatFieldMetadatasToDeleteById: {
+          ...accumulator.flatFieldMetadatasToDeleteById,
+          ...fromArrayToUniqueKeyRecord({
+            array: flatFieldMetadatasToDelete,
+            uniqueKey: 'id',
+          }),
+        },
+        flatIndexToDeleteById: {
+          ...accumulator.flatIndexToDeleteById,
+          ...fromArrayToUniqueKeyRecord({
+            array: flatIndexToDelete,
+            uniqueKey: 'id',
+          }),
+        },
+        flatObjectMetadatasToDeleteById: {
+          ...accumulator.flatObjectMetadatasToDeleteById,
+          [flatObjectMetadataToDelete.id]: flatObjectMetadataToDelete,
+        },
+      };
+    }, initialAccumulator);
+
+    const {
+      flatFieldMetadatasToDelete,
+      flatObjectMetadatasToDelete,
+      flatIndexToDelete,
+    } = {
+      flatFieldMetadatasToDelete: Object.values(flatFieldMetadatasToDeleteById),
+      flatObjectMetadatasToDelete: Object.values(
+        flatObjectMetadatasToDeleteById,
+      ),
+      flatIndexToDelete: Object.values(flatIndexToDeleteById),
+    };
+
+    const validateAndBuildResult =
+      await this.workspaceMigrationValidateBuildAndRunService.validateBuildAndRunWorkspaceMigration(
         {
+          fromToAllFlatEntityMaps: {
+            flatObjectMetadataMaps: computeFlatEntityMapsFromTo({
+              flatEntityMaps: flatObjectMetadataMaps,
+              flatEntityToCreate: [],
+              flatEntityToDelete: flatObjectMetadatasToDelete,
+              flatEntityToUpdate: [],
+            }),
+            flatIndexMaps: computeFlatEntityMapsFromTo({
+              flatEntityMaps: flatIndexMaps,
+              flatEntityToCreate: [],
+              flatEntityToDelete: flatIndexToDelete,
+              flatEntityToUpdate: [],
+            }),
+            flatFieldMetadataMaps: computeFlatEntityMapsFromTo({
+              flatEntityMaps: flatFieldMetadataMaps,
+              flatEntityToCreate: [],
+              flatEntityToDelete: flatFieldMetadatasToDelete,
+              flatEntityToUpdate: [],
+            }),
+          },
+          buildOptions: {
+            inferDeletionFromMissingEntities: {
+              objectMetadata: true,
+              fieldMetadata: true,
+              index: true,
+            },
+            isSystemBuild,
+          },
           workspaceId,
         },
       );
 
-      if (didUpdateLabelOrIcon) {
-        await this.objectMetadataRelatedRecordsService.updateObjectViews(
-          updatedObject,
-          workspaceId,
-        );
-      }
-
-      await this.workspaceMetadataVersionService.incrementMetadataVersion(
-        workspaceId,
+    if (isDefined(validateAndBuildResult)) {
+      throw new WorkspaceMigrationBuilderExceptionV2(
+        validateAndBuildResult,
+        `Multiple validation errors occurred while deleting object${deleteObjectInputs.length > 1 ? 's' : ''}`,
       );
-
-      const formattedUpdatedObject = {
-        ...updatedObject,
-        createdAt: new Date(updatedObject.createdAt),
-        updatedAt: new Date(updatedObject.updatedAt),
-      };
-
-      return formattedUpdatedObject;
-    } catch (error) {
-      if (queryRunner.isTransactionActive) {
-        await queryRunner.rollbackTransaction();
-      }
-      throw error;
-    } finally {
-      await queryRunner.release();
     }
+
+    return flatObjectMetadatasToDelete;
   }
 
-  public async deleteOneObject(
-    input: DeleteOneObjectInput,
-    workspaceId: string,
-  ): Promise<Partial<ObjectMetadataEntity>> {
-    const mainDataSource =
-      await this.workspaceDataSourceService.connectToMainDataSource();
-    const queryRunner = mainDataSource.createQueryRunner();
-
-    await queryRunner.connect();
-    await queryRunner.startTransaction();
-
-    try {
-      const objectMetadataRepository =
-        queryRunner.manager.getRepository(ObjectMetadataEntity);
-      const fieldMetadataRepository =
-        queryRunner.manager.getRepository(FieldMetadataEntity);
-
-      const objectMetadata = await objectMetadataRepository.findOne({
-        relations: [
-          'fields',
-          'fields.object',
-          'fields.relationTargetFieldMetadata',
-          'fields.relationTargetFieldMetadata.object',
-        ],
-        where: {
-          id: input.id,
-          workspaceId,
-        },
-      });
-
-      if (!objectMetadata) {
-        throw new ObjectMetadataException(
-          'Object does not exist',
-          ObjectMetadataExceptionCode.OBJECT_METADATA_NOT_FOUND,
-        );
-      }
-
-      if (objectMetadata.isRemote) {
-        throw new ObjectMetadataException(
-          'Remote objects are not supported yet',
-          ObjectMetadataExceptionCode.INVALID_OBJECT_INPUT,
-        );
-      } else {
-        await this.objectMetadataMigrationService.deleteAllRelationsAndDropTable(
-          objectMetadata,
-          workspaceId,
-          queryRunner,
-        );
-      }
-
-      await this.workspaceMigrationRunnerService.executeMigrationFromPendingMigrationsWithinTransaction(
-        workspaceId,
-        queryRunner,
-      );
-
-      const fieldMetadataIds = objectMetadata.fields.map((field) => field.id);
-      const relationMetadataIds = objectMetadata.fields.flatMap((field) => {
-        if (
-          isFieldMetadataEntityOfType(field, FieldMetadataType.MORPH_RELATION)
-        ) {
-          return field.relationTargetFieldMetadata.id;
-        }
-
-        return [];
-      });
-
-      await fieldMetadataRepository.delete({
-        id: In(fieldMetadataIds.concat(relationMetadataIds)),
-      });
-
-      await objectMetadataRepository.delete(objectMetadata.id);
-
-      await queryRunner.commitTransaction();
-
-      // After commit, do non-transactional work
-      await this.workspaceMetadataVersionService.incrementMetadataVersion(
-        workspaceId,
-      );
-
-      await this.workspacePermissionsCacheService.recomputeRolesPermissionsCache(
+  async createOneObject({
+    createObjectInput,
+    workspaceId,
+    applicationId,
+  }: {
+    createObjectInput: CreateObjectInput;
+    workspaceId: string;
+    /**
+     * @deprecated do not use call validateBuildAndRunWorkspaceMigration contextually
+     * when interacting with another application than workspace custom one
+     * */
+    applicationId?: string;
+  }): Promise<FlatObjectMetadata> {
+    const { workspaceCustomFlatApplication } =
+      await this.applicationService.findWorkspaceTwentyStandardAndCustomApplicationOrThrow(
         {
           workspaceId,
         },
       );
-
-      await this.objectMetadataRelatedRecordsService.deleteObjectViews(
-        objectMetadata,
+    const {
+      flatObjectMetadataMaps: existingFlatObjectMetadataMaps,
+      flatViewMaps: existingFlatViewMaps,
+      flatViewFieldMaps: existingFlatViewFieldMaps,
+      flatIndexMaps: existingFlatIndexMaps,
+      flatFieldMetadataMaps: existingFlatFieldMetadataMaps,
+    } = await this.flatEntityMapsCacheService.getOrRecomputeManyOrAllFlatEntityMaps(
+      {
         workspaceId,
+        flatMapsKeys: [
+          'flatObjectMetadataMaps',
+          'flatViewMaps',
+          'flatViewFieldMaps',
+          'flatIndexMaps',
+          'flatFieldMetadataMaps',
+        ],
+      },
+    );
+
+    const {
+      flatObjectMetadataToCreate,
+      flatIndexMetadataToCreate,
+      flatFieldMetadataToCreateOnObject,
+      relationTargetFlatFieldMetadataToCreate,
+    } = fromCreateObjectInputToFlatObjectMetadataAndFlatFieldMetadatasToCreate({
+      createObjectInput,
+      workspaceId,
+      workspaceCustomApplicationId:
+        applicationId ?? workspaceCustomFlatApplication.id,
+      flatObjectMetadataMaps: existingFlatObjectMetadataMaps,
+    });
+
+    const flatFieldMetadataMapsFromTo = computeFlatEntityMapsFromTo({
+      flatEntityMaps: existingFlatFieldMetadataMaps,
+      flatEntityToCreate: [
+        ...flatFieldMetadataToCreateOnObject,
+        ...relationTargetFlatFieldMetadataToCreate,
+      ],
+      flatEntityToDelete: [],
+      flatEntityToUpdate: [],
+    });
+
+    const flatDefaultViewToCreate = await this.computeFlatViewToCreate({
+      objectMetadata: flatObjectMetadataToCreate,
+      workspaceId,
+      workspaceCustomApplicationId: workspaceCustomFlatApplication.id,
+    });
+
+    const flatDefaultViewFieldsToCreate =
+      await this.computeFlatViewFieldsToCreate({
+        workspaceCustomApplicationId: workspaceCustomFlatApplication.id,
+        objectFlatFieldMetadatas: findManyFlatEntityByIdInFlatEntityMapsOrThrow(
+          {
+            flatEntityMaps: flatFieldMetadataMapsFromTo.to,
+            flatEntityIds: flatFieldMetadataToCreateOnObject.map(
+              ({ id }) => id,
+            ),
+          },
+        ),
+        viewId: flatDefaultViewToCreate.id,
+        workspaceId,
+      });
+
+    const validateAndBuildResult =
+      await this.workspaceMigrationValidateBuildAndRunService.validateBuildAndRunWorkspaceMigration(
+        {
+          fromToAllFlatEntityMaps: {
+            flatObjectMetadataMaps: computeFlatEntityMapsFromTo({
+              flatEntityMaps: existingFlatObjectMetadataMaps,
+              flatEntityToCreate: [flatObjectMetadataToCreate],
+              flatEntityToDelete: [],
+              flatEntityToUpdate: [],
+            }),
+            flatViewMaps: computeFlatEntityMapsFromTo({
+              flatEntityMaps: existingFlatViewMaps,
+              flatEntityToCreate: [flatDefaultViewToCreate],
+              flatEntityToDelete: [],
+              flatEntityToUpdate: [],
+            }),
+            flatViewFieldMaps: computeFlatEntityMapsFromTo({
+              flatEntityMaps: existingFlatViewFieldMaps,
+              flatEntityToCreate: flatDefaultViewFieldsToCreate,
+              flatEntityToDelete: [],
+              flatEntityToUpdate: [],
+            }),
+            flatFieldMetadataMaps: flatFieldMetadataMapsFromTo,
+            flatIndexMaps: computeFlatEntityMapsFromTo({
+              flatEntityMaps: existingFlatIndexMaps,
+              flatEntityToCreate: flatIndexMetadataToCreate,
+              flatEntityToDelete: [],
+              flatEntityToUpdate: [],
+            }),
+          },
+          buildOptions: {
+            isSystemBuild: false,
+          },
+          workspaceId,
+        },
       );
 
-      return objectMetadata;
-    } catch (error) {
-      if (queryRunner.isTransactionActive) {
-        await queryRunner.rollbackTransaction();
-      }
-      throw error;
-    } finally {
-      await queryRunner.release();
+    if (isDefined(validateAndBuildResult)) {
+      throw new WorkspaceMigrationBuilderExceptionV2(
+        validateAndBuildResult,
+        'Multiple validation errors occurred while creating object',
+      );
     }
+
+    const { flatObjectMetadataMaps: recomputedFlatObjectMetadataMaps } =
+      await this.flatEntityMapsCacheService.getOrRecomputeManyOrAllFlatEntityMaps(
+        {
+          workspaceId,
+          flatMapsKeys: ['flatObjectMetadataMaps'],
+        },
+      );
+
+    const createdFlatObjectMetadata =
+      recomputedFlatObjectMetadataMaps.byId[flatObjectMetadataToCreate.id];
+
+    if (!isDefined(createdFlatObjectMetadata)) {
+      throw new ObjectMetadataException(
+        'Created object metadata not found in recomputed cache',
+        ObjectMetadataExceptionCode.OBJECT_METADATA_NOT_FOUND,
+      );
+    }
+
+    await this.createWorkspaceFavoriteForNewObjectDefaultView({
+      view: flatDefaultViewToCreate,
+      workspaceId,
+    });
+
+    return createdFlatObjectMetadata;
+  }
+
+  private async computeFlatViewToCreate({
+    objectMetadata,
+    workspaceId,
+    workspaceCustomApplicationId,
+  }: {
+    workspaceCustomApplicationId: string;
+    objectMetadata: FlatObjectMetadata;
+    workspaceId: string;
+  }) {
+    const defaultViewInput = {
+      objectMetadataId: objectMetadata.id,
+      name: `All {objectLabelPlural}`,
+      key: ViewKey.INDEX,
+      icon: 'IconList',
+      type: ViewType.TABLE,
+      workspaceId: workspaceId,
+    };
+
+    const flatViewFromCreateInput = fromCreateViewInputToFlatViewToCreate({
+      createViewInput: defaultViewInput,
+      workspaceId,
+      workspaceCustomApplicationId,
+    });
+
+    return flatViewFromCreateInput;
+  }
+
+  private async computeFlatViewFieldsToCreate({
+    objectFlatFieldMetadatas,
+    viewId,
+    workspaceId,
+    workspaceCustomApplicationId,
+  }: {
+    workspaceCustomApplicationId: string;
+    objectFlatFieldMetadatas: FlatFieldMetadata[];
+    viewId: string;
+    workspaceId: string;
+  }) {
+    const defaultViewFields = objectFlatFieldMetadatas
+      .filter((field) => field.name !== 'id' && field.name !== 'deletedAt')
+      .map((field, index) =>
+        fromCreateViewFieldInputToFlatViewFieldToCreate({
+          createViewFieldInput: {
+            fieldMetadataId: field.id,
+            position: index,
+            isVisible: true,
+            size: DEFAULT_VIEW_FIELD_SIZE,
+            viewId: viewId,
+          },
+          workspaceCustomApplicationId,
+          workspaceId: workspaceId,
+        }),
+      );
+
+    return defaultViewFields;
+  }
+
+  private async createWorkspaceFavoriteForNewObjectDefaultView({
+    view,
+    workspaceId,
+  }: {
+    view: FlatView;
+    workspaceId: string;
+  }) {
+    const favoriteRepository =
+      await this.twentyORMGlobalManager.getRepositoryForWorkspace<FavoriteWorkspaceEntity>(
+        workspaceId,
+        'favorite',
+      );
+
+    const favoriteCount = await favoriteRepository.count();
+
+    await favoriteRepository.insert({
+      viewId: view.id,
+      position: favoriteCount,
+    });
+  }
+
+  public async deleteWorkspaceAllObjectMetadata({
+    workspaceId,
+  }: {
+    workspaceId: string;
+  }) {
+    const { flatObjectMetadataMaps } =
+      await this.flatEntityMapsCacheService.getOrRecomputeManyOrAllFlatEntityMaps(
+        {
+          workspaceId,
+          flatMapsKeys: ['flatObjectMetadataMaps'],
+        },
+      );
+
+    const deleteObjectInputs = Object.values(flatObjectMetadataMaps.byId)
+      .filter(isDefined)
+      .map<DeleteOneObjectInput>((flatObjectMetadata) => ({
+        id: flatObjectMetadata.id,
+      }));
+
+    await this.deleteManyObjectMetadatas({
+      deleteObjectInputs,
+      workspaceId,
+      isSystemBuild: true,
+    });
   }
 
   public async findOneWithinWorkspace(
@@ -523,7 +583,11 @@ export class ObjectMetadataService extends TypeOrmQueryService<ObjectMetadataEnt
     options: FindOneOptions<ObjectMetadataEntity>,
   ): Promise<ObjectMetadataEntity | null> {
     return this.objectMetadataRepository.findOne({
-      relations: ['fields'],
+      relations: [
+        'fields',
+        'indexMetadatas',
+        'indexMetadatas.indexFieldMetadatas',
+      ],
       ...options,
       where: {
         ...options.where,
@@ -535,13 +599,8 @@ export class ObjectMetadataService extends TypeOrmQueryService<ObjectMetadataEnt
   public async findManyWithinWorkspace(
     workspaceId: string,
     options?: FindManyOptions<ObjectMetadataEntity>,
-  ) {
-    return this.objectMetadataRepository.find({
-      relations: [
-        'fields.object',
-        'fields',
-        'fields.relationTargetObjectMetadata',
-      ],
+  ): Promise<FlatObjectMetadata[]> {
+    const objectMetadataEntities = await this.objectMetadataRepository.find({
       ...options,
       where: {
         ...options?.where,
@@ -550,95 +609,27 @@ export class ObjectMetadataService extends TypeOrmQueryService<ObjectMetadataEnt
       order: {
         ...options?.order,
       },
+      select: { id: true },
     });
-  }
 
-  public async deleteObjectsMetadata(workspaceId: string) {
-    await this.objectMetadataRepository.delete({ workspaceId });
-  }
-
-  private async handleObjectNameAndLabelUpdates(
-    existingObjectMetadata: Pick<
-      ObjectMetadataItemWithFieldMaps,
-      'nameSingular' | 'isCustom' | 'id' | 'labelPlural' | 'icon' | 'fieldsById'
-    >,
-    objectMetadataForUpdate: Pick<
-      ObjectMetadataItemWithFieldMaps,
-      | 'nameSingular'
-      | 'isCustom'
-      | 'workspaceId'
-      | 'id'
-      | 'labelSingular'
-      | 'labelPlural'
-      | 'icon'
-      | 'fieldsById'
-    >,
-    inputPayload: UpdateObjectPayload,
-    queryRunner: QueryRunner,
-  ): Promise<{ didUpdateLabelOrIcon: boolean }> {
-    const newTargetTableName = computeObjectTargetTable(
-      objectMetadataForUpdate,
-    );
-    const existingTargetTableName = computeObjectTargetTable(
-      existingObjectMetadata,
+    const objectMetadataIds = objectMetadataEntities.map(
+      (objectMetadata) => objectMetadata.id,
     );
 
-    if (newTargetTableName !== existingTargetTableName) {
-      await this.objectMetadataMigrationService.createRenameTableMigration(
-        existingObjectMetadata,
-        objectMetadataForUpdate,
-        objectMetadataForUpdate.workspaceId,
-        queryRunner,
+    const { flatObjectMetadataMaps } =
+      await this.flatEntityMapsCacheService.getOrRecomputeManyOrAllFlatEntityMaps(
+        {
+          workspaceId,
+          flatMapsKeys: ['flatObjectMetadataMaps'],
+        },
       );
 
-      const relationMetadataCollection =
-        await this.objectMetadataFieldRelationService.updateRelationsAndForeignKeysMetadata(
-          objectMetadataForUpdate.workspaceId,
-          objectMetadataForUpdate,
-          queryRunner,
-        );
+    const filteredOutAndSortedFlatObjectMetadataMaps =
+      findManyFlatEntityByIdInFlatEntityMapsOrThrow({
+        flatEntityMaps: flatObjectMetadataMaps,
+        flatEntityIds: objectMetadataIds,
+      });
 
-      await this.objectMetadataMigrationService.updateRelationMigrations(
-        existingObjectMetadata,
-        objectMetadataForUpdate,
-        relationMetadataCollection,
-        objectMetadataForUpdate.workspaceId,
-        queryRunner,
-      );
-
-      await this.objectMetadataMigrationService.recomputeEnumNames(
-        objectMetadataForUpdate,
-        objectMetadataForUpdate.workspaceId,
-        queryRunner,
-      );
-
-      const recomputedIndexes =
-        await this.indexMetadataService.recomputeIndexMetadataForObject(
-          objectMetadataForUpdate.workspaceId,
-          objectMetadataForUpdate,
-          queryRunner,
-        );
-
-      await this.indexMetadataService.createIndexRecomputeMigrations(
-        objectMetadataForUpdate.workspaceId,
-        objectMetadataForUpdate,
-        recomputedIndexes,
-        queryRunner,
-      );
-
-      if (
-        (inputPayload.labelPlural || inputPayload.icon) &&
-        (inputPayload.labelPlural !== existingObjectMetadata.labelPlural ||
-          inputPayload.icon !== existingObjectMetadata.icon)
-      ) {
-        return {
-          didUpdateLabelOrIcon: true,
-        };
-      }
-    }
-
-    return {
-      didUpdateLabelOrIcon: false,
-    };
+    return filteredOutAndSortedFlatObjectMetadataMaps;
   }
 }

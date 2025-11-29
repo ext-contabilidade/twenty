@@ -1,17 +1,18 @@
-import { FieldMetadataType } from 'twenty-shared/types';
+import {
+  type CompositeType,
+  compositeTypeDefinitions,
+  FieldMetadataType,
+} from 'twenty-shared/types';
 import { isDefined } from 'twenty-shared/utils';
 
-import { CompositeType } from 'src/engine/metadata-modules/field-metadata/interfaces/composite-type.interface';
-
-import { compositeTypeDefinitions } from 'src/engine/metadata-modules/field-metadata/composite-types';
-import { FieldMetadataEntity } from 'src/engine/metadata-modules/field-metadata/field-metadata.entity';
+import { type FieldMetadataEntity } from 'src/engine/metadata-modules/field-metadata/field-metadata.entity';
 import { computeCompositeColumnName } from 'src/engine/metadata-modules/field-metadata/utils/compute-column-name.util';
 import { isCompositeFieldMetadataType } from 'src/engine/metadata-modules/field-metadata/utils/is-composite-field-metadata-type.util';
-import { IndexMetadataEntity } from 'src/engine/metadata-modules/index-metadata/index-metadata.entity';
-import { ObjectMetadataEntity } from 'src/engine/metadata-modules/object-metadata/object-metadata.entity';
+import { type IndexMetadataEntity } from 'src/engine/metadata-modules/index-metadata/index-metadata.entity';
+import { type ObjectMetadataEntity } from 'src/engine/metadata-modules/object-metadata/object-metadata.entity';
 import { generateMigrationName } from 'src/engine/metadata-modules/workspace-migration/utils/generate-migration-name.util';
 import {
-  WorkspaceMigrationEntity,
+  type WorkspaceMigrationEntity,
   WorkspaceMigrationIndexActionType,
   WorkspaceMigrationTableActionType,
 } from 'src/engine/metadata-modules/workspace-migration/workspace-migration.entity';
@@ -57,6 +58,10 @@ export const createIndexMigration = async (
             isFieldMetadataEntityOfType(
               fieldMetadata,
               FieldMetadataType.RELATION,
+            ) ||
+            isFieldMetadataEntityOfType(
+              fieldMetadata,
+              FieldMetadataType.MORPH_RELATION,
             )
           ) {
             if (!fieldMetadata.settings) {
@@ -87,17 +92,13 @@ export const createIndexMigration = async (
         .flat()
         .filter(isDefined);
 
-      const defaultWhereClause = indexMetadata.isUnique
-        ? `${columns.map((column) => `"${column}"`).join(" != '' AND ")} != '' AND "deletedAt" IS NULL`
-        : null;
-
       return {
         name: indexMetadata.name,
         action: WorkspaceMigrationIndexActionType.CREATE,
         isUnique: indexMetadata.isUnique,
         columns,
         type: indexMetadata.indexType,
-        where: indexMetadata.indexWhereClause ?? defaultWhereClause,
+        where: indexMetadata.indexWhereClause,
       };
     });
 

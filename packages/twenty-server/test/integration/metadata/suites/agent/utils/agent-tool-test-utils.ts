@@ -1,23 +1,38 @@
-import { Test, TestingModule } from '@nestjs/testing';
+import { Test, type TestingModule } from '@nestjs/testing';
 import { getRepositoryToken } from '@nestjs/typeorm';
 
-import { Repository } from 'typeorm';
+import { type Repository } from 'typeorm';
 
-import { ToolAdapterService } from 'src/engine/core-modules/ai/services/tool-adapter.service';
-import { ToolService } from 'src/engine/core-modules/ai/services/tool.service';
-import { AgentToolService } from 'src/engine/metadata-modules/agent/agent-tool.service';
-import { AgentEntity } from 'src/engine/metadata-modules/agent/agent.entity';
-import { AgentService } from 'src/engine/metadata-modules/agent/agent.service';
-import { ObjectMetadataEntity } from 'src/engine/metadata-modules/object-metadata/object-metadata.entity';
+import { type ApplicationEntity } from 'src/engine/core-modules/application/application.entity';
+import { CreateRecordService } from 'src/engine/core-modules/record-crud/services/create-record.service';
+import { DeleteRecordService } from 'src/engine/core-modules/record-crud/services/delete-record.service';
+import { FindRecordsService } from 'src/engine/core-modules/record-crud/services/find-records.service';
+import { UpdateRecordService } from 'src/engine/core-modules/record-crud/services/update-record.service';
+import { RecordInputTransformerService } from 'src/engine/core-modules/record-transformer/services/record-input-transformer.service';
+import { ToolRegistryService } from 'src/engine/core-modules/tool/services/tool-registry.service';
+import { SearchArticlesTool } from 'src/engine/core-modules/tool/tools/search-articles-tool/search-articles-tool';
+import { SendEmailTool } from 'src/engine/core-modules/tool/tools/send-email-tool/send-email-tool';
+import { TwentyConfigService } from 'src/engine/core-modules/twenty-config/twenty-config.service';
+import { AgentService } from 'src/engine/metadata-modules/ai/ai-agent/agent.service';
+import { AgentEntity } from 'src/engine/metadata-modules/ai/ai-agent/entities/agent.entity';
+import { AgentToolGeneratorService } from 'src/engine/metadata-modules/ai/ai-agent/services/agent-tool-generator.service';
+import { ToolAdapterService } from 'src/engine/metadata-modules/ai/ai-tools/services/tool-adapter.service';
+import { ToolService } from 'src/engine/metadata-modules/ai/ai-tools/services/tool.service';
+import { WorkspaceManyOrAllFlatEntityMapsCacheService } from 'src/engine/metadata-modules/flat-entity/services/workspace-many-or-all-flat-entity-maps-cache.service';
+import { type ObjectMetadataEntity } from 'src/engine/metadata-modules/object-metadata/object-metadata.entity';
 import { ObjectMetadataService } from 'src/engine/metadata-modules/object-metadata/object-metadata.service';
+import { PermissionsService } from 'src/engine/metadata-modules/permissions/permissions.service';
 import { RoleEntity } from 'src/engine/metadata-modules/role/role.entity';
 import { WorkspacePermissionsCacheService } from 'src/engine/metadata-modules/workspace-permissions-cache/workspace-permissions-cache.service';
+import { ScopedWorkspaceContextFactory } from 'src/engine/twenty-orm/factories/scoped-workspace-context.factory';
 import { TwentyORMGlobalManager } from 'src/engine/twenty-orm/twenty-orm-global.manager';
+import { MessagingSendMessageService } from 'src/modules/messaging/message-import-manager/services/messaging-send-message.service';
+import { WorkflowToolWorkspaceService } from 'src/modules/workflow/workflow-tools/services/workflow-tool.workspace-service';
 import { getMockObjectMetadataEntity } from 'src/utils/__test__/get-object-metadata-entity.mock';
 
 export interface AgentToolTestContext {
   module: TestingModule;
-  agentToolService: AgentToolService;
+  agentToolService: AgentToolGeneratorService;
   agentService: AgentService;
   objectMetadataService: ObjectMetadataService;
   roleRepository: Repository<RoleEntity>;
@@ -39,7 +54,7 @@ export const createAgentToolTestModule =
 
     const module = await Test.createTestingModule({
       providers: [
-        AgentToolService,
+        AgentToolGeneratorService,
         {
           provide: AgentService,
           useValue: {
@@ -47,9 +62,17 @@ export const createAgentToolTestModule =
           },
         },
         {
-          provide: getRepositoryToken(RoleEntity, 'core'),
+          provide: getRepositoryToken(RoleEntity),
           useValue: {
             findOne: jest.fn(),
+            find: jest.fn(),
+          },
+        },
+        {
+          provide: getRepositoryToken(AgentEntity),
+          useValue: {
+            findOne: jest.fn(),
+            find: jest.fn(),
           },
         },
         {
@@ -76,19 +99,111 @@ export const createAgentToolTestModule =
           useClass: ToolService,
         },
         {
+          provide: CreateRecordService,
+          useValue: {
+            execute: jest.fn(),
+          },
+        },
+        {
+          provide: UpdateRecordService,
+          useValue: {
+            execute: jest.fn(),
+          },
+        },
+        {
+          provide: DeleteRecordService,
+          useValue: {
+            execute: jest.fn(),
+          },
+        },
+        {
+          provide: FindRecordsService,
+          useValue: {
+            execute: jest.fn().mockResolvedValue({
+              success: true,
+              message: 'Records found successfully',
+              result: [],
+            }),
+          },
+        },
+        {
+          provide: RecordInputTransformerService,
+          useValue: {
+            process: jest.fn(async ({ recordInput }) => recordInput),
+          },
+        },
+        {
+          provide: WorkspaceManyOrAllFlatEntityMapsCacheService,
+          useValue: {
+            getOrRecomputeManyOrAllFlatEntityMaps: jest.fn(),
+          },
+        },
+        {
           provide: ToolAdapterService,
           useClass: ToolAdapterService,
+        },
+        {
+          provide: ToolRegistryService,
+          useClass: ToolRegistryService,
+        },
+        {
+          provide: SendEmailTool,
+          useValue: {
+            description: 'mock',
+            inputSchema: {},
+            execute: jest.fn(),
+          },
+        },
+        {
+          provide: SearchArticlesTool,
+          useValue: {
+            description: 'Search for articles and documentation',
+            inputSchema: {},
+            execute: jest.fn(),
+          },
+        },
+        {
+          provide: ScopedWorkspaceContextFactory,
+          useValue: {
+            create: jest.fn(() => ({ workspaceId: 'test-workspace-id' })),
+          },
+        },
+        {
+          provide: MessagingSendMessageService,
+          useValue: { sendMessage: jest.fn() },
+        },
+        {
+          provide: PermissionsService,
+          useValue: {
+            hasToolPermission: jest.fn(),
+            checkRolePermissions: jest.fn().mockReturnValue(true),
+            checkRolesPermissions: jest.fn().mockResolvedValue(true),
+          },
+        },
+        {
+          provide: WorkflowToolWorkspaceService,
+          useValue: {
+            generateWorkflowTools: jest.fn().mockResolvedValue({}),
+          },
+        },
+        {
+          provide: TwentyConfigService,
+          useValue: {
+            get: jest.fn(),
+          },
         },
       ],
     }).compile();
 
-    const agentToolService = module.get<AgentToolService>(AgentToolService);
+    const agentToolService = module.get<AgentToolGeneratorService>(
+      AgentToolGeneratorService,
+    );
     const agentService = module.get<AgentService>(AgentService);
     const objectMetadataService = module.get<ObjectMetadataService>(
       ObjectMetadataService,
     );
     const roleRepository = module.get<Repository<RoleEntity>>(
-      getRepositoryToken(RoleEntity, 'core'),
+      getRepositoryToken(RoleEntity),
     );
     const workspacePermissionsCacheService =
       module.get<WorkspacePermissionsCacheService>(
@@ -104,16 +219,22 @@ export const createAgentToolTestModule =
       label: 'Test Agent',
       icon: 'IconTest',
       isCustom: false,
+      applicationId: null,
+      application: {} as ApplicationEntity,
+      standardId: null,
+      deletedAt: null,
+      universalIdentifier: testAgentId,
       description: 'Test agent for integration tests',
       prompt: 'You are a test agent',
       modelId: 'gpt-4o',
-      responseFormat: {},
+      evaluationInputs: [],
+      responseFormat: { type: 'text' },
       workspaceId: testWorkspaceId,
       workspace: {} as any,
       roleId: testRoleId,
       createdAt: new Date(),
       updatedAt: new Date(),
-      chatThreads: [],
+      modelConfiguration: {},
     };
 
     const testRole: RoleEntity = {
@@ -161,6 +282,38 @@ export const createAgentToolTestModule =
       fieldPermissions: [],
     });
 
+    // Ensure ToolService input transformation has access to minimal metadata maps
+    const workspaceManyOrAllFlatEntityMapsCacheService =
+      module.get<WorkspaceManyOrAllFlatEntityMapsCacheService>(
+        WorkspaceManyOrAllFlatEntityMapsCacheService,
+      );
+
+    // Return a barebones flat object metadata map where fields are unknown (so transformer is a no-op)
+    const getMapsMock =
+      workspaceManyOrAllFlatEntityMapsCacheService.getOrRecomputeManyOrAllFlatEntityMaps as jest.Mock;
+
+    getMapsMock.mockResolvedValue({
+      flatObjectMetadataMaps: {
+        byId: {
+          [testObjectMetadata.id]: {
+            ...testObjectMetadata,
+            fieldMetadataIds: [],
+            indexMetadataIds: [],
+            viewIds: [],
+            universalIdentifier: testObjectMetadata.id,
+            applicationId: null,
+          } as any,
+        },
+        idByUniversalIdentifier: {},
+        universalIdentifiersByApplicationId: {},
+      },
+      flatFieldMetadataMaps: {
+        byId: {},
+        idByUniversalIdentifier: {},
+        universalIdentifiersByApplicationId: {},
+      },
+    } as any);
+
     return {
       module,
       agentToolService,
@@ -177,94 +330,3 @@ export const createAgentToolTestModule =
       testRoleId,
     };
   };
-
-export const createMockRepository = () => ({
-  find: jest.fn(),
-  findOne: jest.fn(),
-  save: jest.fn(),
-  update: jest.fn(),
-  softDelete: jest.fn(),
-  remove: jest.fn(),
-  delete: jest.fn(),
-});
-
-export const setupBasicPermissions = (context: AgentToolTestContext) => {
-  jest
-    .spyOn(context.agentService, 'findOneAgent')
-    .mockResolvedValue(context.testAgent);
-  jest
-    .spyOn(context.roleRepository, 'findOne')
-    .mockResolvedValue(context.testRole);
-  jest
-    .spyOn(
-      context.workspacePermissionsCacheService,
-      'getRolesPermissionsFromCache',
-    )
-    .mockResolvedValue({
-      data: {
-        [context.testRoleId]: {
-          [context.testObjectMetadata.id]: {
-            canRead: true,
-            canUpdate: true,
-            canSoftDelete: true,
-            canDestroy: false,
-            restrictedFields: {},
-          },
-        },
-      },
-      version: '1.0',
-    });
-  jest
-    .spyOn(context.objectMetadataService, 'findManyWithinWorkspace')
-    .mockResolvedValue([context.testObjectMetadata]);
-};
-
-export const setupRepositoryMock = (
-  context: AgentToolTestContext,
-  mockRepository: any,
-) => {
-  jest
-    .spyOn(context.twentyORMGlobalManager, 'getRepositoryForWorkspace')
-    .mockResolvedValue(mockRepository);
-};
-
-export const createTestRecord = (
-  id: string,
-  data: Record<string, any> = {},
-) => ({
-  id,
-  name: `Test Record ${id}`,
-  createdAt: new Date(),
-  updatedAt: new Date(),
-  ...data,
-});
-
-export const createTestRecords = (
-  count: number,
-  baseData: Record<string, any> = {},
-) => {
-  return Array.from({ length: count }, (_, i) =>
-    createTestRecord(`record-${i + 1}`, baseData),
-  );
-};
-
-export const expectSuccessResult = (result: any, expectedMessage?: string) => {
-  expect(result.success).toBe(true);
-  if (expectedMessage) {
-    expect(result.message).toContain(expectedMessage);
-  }
-};
-
-export const expectErrorResult = (
-  result: any,
-  expectedError?: string,
-  expectedMessage?: string,
-) => {
-  expect(result.success).toBe(false);
-  if (expectedError) {
-    expect(result.error).toBe(expectedError);
-  }
-  if (expectedMessage) {
-    expect(result.message).toContain(expectedMessage);
-  }
-};

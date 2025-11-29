@@ -8,31 +8,33 @@ import {
 import { Args, Mutation, Query, Resolver } from '@nestjs/graphql';
 
 import { ConnectedAccountProvider } from 'twenty-shared/types';
+import { isDefined } from 'twenty-shared/utils';
 
+import { UUIDScalarType } from 'src/engine/api/graphql/workspace-schema-builder/graphql-types/scalars';
 import { AuthGraphqlApiExceptionFilter } from 'src/engine/core-modules/auth/filters/auth-graphql-api-exception.filter';
 import { FeatureFlagKey } from 'src/engine/core-modules/feature-flag/enums/feature-flag-key.enum';
 import { FeatureFlagService } from 'src/engine/core-modules/feature-flag/services/feature-flag.service';
 import { ResolverValidationPipe } from 'src/engine/core-modules/graphql/pipes/resolver-validation.pipe';
 import { UserInputError } from 'src/engine/core-modules/graphql/utils/graphql-errors.util';
-import { ConnectedImapSmtpCaldavAccount } from 'src/engine/core-modules/imap-smtp-caldav-connection/dtos/imap-smtp-caldav-connected-account.dto';
-import { ImapSmtpCaldavConnectionSuccess } from 'src/engine/core-modules/imap-smtp-caldav-connection/dtos/imap-smtp-caldav-connection-success.dto';
+import { ConnectedImapSmtpCaldavAccountDTO } from 'src/engine/core-modules/imap-smtp-caldav-connection/dtos/imap-smtp-caldav-connected-account.dto';
+import { ImapSmtpCaldavConnectionSuccessDTO } from 'src/engine/core-modules/imap-smtp-caldav-connection/dtos/imap-smtp-caldav-connection-success.dto';
 import { EmailAccountConnectionParameters } from 'src/engine/core-modules/imap-smtp-caldav-connection/dtos/imap-smtp-caldav-connection.dto';
 import { ImapSmtpCaldavValidatorService } from 'src/engine/core-modules/imap-smtp-caldav-connection/services/imap-smtp-caldav-connection-validator.service';
 import { ImapSmtpCaldavService } from 'src/engine/core-modules/imap-smtp-caldav-connection/services/imap-smtp-caldav-connection.service';
-import { Workspace } from 'src/engine/core-modules/workspace/workspace.entity';
+import { WorkspaceEntity } from 'src/engine/core-modules/workspace/workspace.entity';
 import { AuthWorkspace } from 'src/engine/decorators/auth/auth-workspace.decorator';
-import { SettingsPermissionsGuard } from 'src/engine/guards/settings-permissions.guard';
+import { SettingsPermissionGuard } from 'src/engine/guards/settings-permission.guard';
 import { WorkspaceAuthGuard } from 'src/engine/guards/workspace-auth.guard';
-import { SettingPermissionType } from 'src/engine/metadata-modules/permissions/constants/setting-permission-type.constants';
+import { PermissionFlagType } from 'src/engine/metadata-modules/permissions/constants/permission-flag-type.constants';
 import { PermissionsGraphqlApiExceptionFilter } from 'src/engine/metadata-modules/permissions/utils/permissions-graphql-api-exception.filter';
 import { TwentyORMGlobalManager } from 'src/engine/twenty-orm/twenty-orm-global.manager';
 import { ImapSmtpCalDavAPIService } from 'src/modules/connected-account/services/imap-smtp-caldav-apis.service';
-import { ConnectedAccountWorkspaceEntity } from 'src/modules/connected-account/standard-objects/connected-account.workspace-entity';
+import { type ConnectedAccountWorkspaceEntity } from 'src/modules/connected-account/standard-objects/connected-account.workspace-entity';
 
 @Resolver()
 @UsePipes(ResolverValidationPipe)
 @UseFilters(AuthGraphqlApiExceptionFilter, PermissionsGraphqlApiExceptionFilter)
-@UseGuards(SettingsPermissionsGuard(SettingPermissionType.WORKSPACE))
+@UseGuards(SettingsPermissionGuard(PermissionFlagType.WORKSPACE))
 export class ImapSmtpCaldavResolver {
   constructor(
     private readonly twentyORMGlobalManager: TwentyORMGlobalManager,
@@ -42,12 +44,12 @@ export class ImapSmtpCaldavResolver {
     private readonly mailConnectionValidatorService: ImapSmtpCaldavValidatorService,
   ) {}
 
-  @Query(() => ConnectedImapSmtpCaldavAccount)
+  @Query(() => ConnectedImapSmtpCaldavAccountDTO)
   @UseGuards(WorkspaceAuthGuard)
   async getConnectedImapSmtpCaldavAccount(
-    @Args('id') id: string,
-    @AuthWorkspace() workspace: Workspace,
-  ): Promise<ConnectedImapSmtpCaldavAccount> {
+    @Args('id', { type: () => UUIDScalarType }) id: string,
+    @AuthWorkspace() workspace: WorkspaceEntity,
+  ): Promise<ConnectedImapSmtpCaldavAccountDTO> {
     const connectedAccountRepository =
       await this.twentyORMGlobalManager.getRepositoryForWorkspace<ConnectedAccountWorkspaceEntity>(
         workspace.id,
@@ -58,7 +60,7 @@ export class ImapSmtpCaldavResolver {
       where: { id, provider: ConnectedAccountProvider.IMAP_SMTP_CALDAV },
     });
 
-    if (!connectedAccount) {
+    if (!isDefined(connectedAccount) || !isDefined(connectedAccount?.handle)) {
       throw new UserInputError(
         `Connected mail account with ID ${id} not found`,
       );
@@ -73,16 +75,17 @@ export class ImapSmtpCaldavResolver {
     };
   }
 
-  @Mutation(() => ImapSmtpCaldavConnectionSuccess)
+  @Mutation(() => ImapSmtpCaldavConnectionSuccessDTO)
   @UseGuards(WorkspaceAuthGuard)
   async saveImapSmtpCaldavAccount(
-    @Args('accountOwnerId') accountOwnerId: string,
+    @Args('accountOwnerId', { type: () => UUIDScalarType })
+    accountOwnerId: string,
     @Args('handle') handle: string,
     @Args('connectionParameters')
     connectionParameters: EmailAccountConnectionParameters,
-    @AuthWorkspace() workspace: Workspace,
-    @Args('id', { nullable: true }) id?: string,
-  ): Promise<ImapSmtpCaldavConnectionSuccess> {
+    @AuthWorkspace() workspace: WorkspaceEntity,
+    @Args('id', { type: () => UUIDScalarType, nullable: true }) id?: string,
+  ): Promise<ImapSmtpCaldavConnectionSuccessDTO> {
     const isImapSmtpCaldavFeatureFlagEnabled =
       await this.featureFlagService.isFeatureEnabled(
         FeatureFlagKey.IS_IMAP_SMTP_CALDAV_ENABLED,
@@ -101,16 +104,18 @@ export class ImapSmtpCaldavResolver {
       handle,
     );
 
-    await this.imapSmtpCaldavApisService.setupCompleteAccount({
-      handle,
-      workspaceMemberId: accountOwnerId,
-      workspaceId: workspace.id,
-      connectionParameters: validatedParams,
-      connectedAccountId: id,
-    });
+    const connectedAccountId =
+      await this.imapSmtpCaldavApisService.processAccount({
+        handle,
+        workspaceMemberId: accountOwnerId,
+        workspaceId: workspace.id,
+        connectionParameters: validatedParams,
+        connectedAccountId: id,
+      });
 
     return {
       success: true,
+      connectedAccountId,
     };
   }
 

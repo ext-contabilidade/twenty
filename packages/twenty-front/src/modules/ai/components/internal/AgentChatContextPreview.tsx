@@ -1,14 +1,11 @@
-import { useRecoilComponentValueV2 } from '@/ui/utilities/state/component-state/hooks/useRecoilComponentValueV2';
-import { agentChatUploadedFilesComponentState } from '@/ai/states/agentChatUploadedFilesComponentState';
-import styled from '@emotion/styled';
-import { AgentChatFilePreview } from './AgentChatFilePreview';
-import { contextStoreCurrentObjectMetadataItemIdComponentState } from '@/context-store/states/contextStoreCurrentObjectMetadataItemIdComponentState';
-import { useLingui } from '@lingui/react/macro';
-import { useRecoilComponentStateV2 } from '@/ui/utilities/state/component-state/hooks/useRecoilComponentStateV2';
-import { agentChatSelectedFilesComponentState } from '@/ai/states/agentChatSelectedFilesComponentState';
-import { useDeleteFileMutation } from '~/generated-metadata/graphql';
-import { useSnackBar } from '@/ui/feedback/snack-bar-manager/hooks/useSnackBar';
 import { AgentChatContextRecordPreview } from '@/ai/components/internal/AgentChatContextRecordPreview';
+import { agentChatSelectedFilesState } from '@/ai/states/agentChatSelectedFilesState';
+import { agentChatUploadedFilesState } from '@/ai/states/agentChatUploadedFilesState';
+import { contextStoreCurrentObjectMetadataItemIdComponentState } from '@/context-store/states/contextStoreCurrentObjectMetadataItemIdComponentState';
+import { useRecoilComponentValue } from '@/ui/utilities/state/component-state/hooks/useRecoilComponentValue';
+import styled from '@emotion/styled';
+import { useRecoilState } from 'recoil';
+import { AgentChatFilePreview } from './AgentChatFilePreview';
 
 const StyledContainer = styled.div`
   display: flex;
@@ -24,35 +21,21 @@ const StyledPreviewsContainer = styled.div`
   gap: ${({ theme }) => theme.spacing(1)};
 `;
 
-export const AgentChatContextPreview = ({ agentId }: { agentId: string }) => {
-  const { t } = useLingui();
-  const [agentChatSelectedFiles, setAgentChatSelectedFiles] =
-    useRecoilComponentStateV2(agentChatSelectedFilesComponentState, agentId);
-  const [agentChatUploadedFiles, setAgentChatUploadedFiles] =
-    useRecoilComponentStateV2(agentChatUploadedFilesComponentState, agentId);
+export const AgentChatContextPreview = () => {
+  const [agentChatSelectedFiles, setAgentChatSelectedFiles] = useRecoilState(
+    agentChatSelectedFilesState,
+  );
+  const [agentChatUploadedFiles, setAgentChatUploadedFiles] = useRecoilState(
+    agentChatUploadedFilesState,
+  );
 
-  const { enqueueErrorSnackBar } = useSnackBar();
-
-  const [deleteFile] = useDeleteFileMutation();
-
-  const handleRemoveUploadedFile = async (fileId: string) => {
-    const originalFiles = agentChatUploadedFiles;
-
+  const handleRemoveUploadedFile = async (fileIndex: number) => {
     setAgentChatUploadedFiles(
-      agentChatUploadedFiles.filter((f) => f.id !== fileId),
+      agentChatUploadedFiles.filter((f, index) => fileIndex !== index),
     );
-
-    try {
-      await deleteFile({ variables: { fileId } });
-    } catch (error) {
-      setAgentChatUploadedFiles(originalFiles);
-      enqueueErrorSnackBar({
-        message: t`Failed to remove file`,
-      });
-    }
   };
 
-  const contextStoreCurrentObjectMetadataItemId = useRecoilComponentValueV2(
+  const contextStoreCurrentObjectMetadataItemId = useRecoilComponentValue(
     contextStoreCurrentObjectMetadataItemIdComponentState,
   );
 
@@ -71,17 +54,16 @@ export const AgentChatContextPreview = ({ agentId }: { agentId: string }) => {
             isUploading
           />
         ))}
-        {agentChatUploadedFiles.map((file) => (
+        {agentChatUploadedFiles.map((file, index) => (
           <AgentChatFilePreview
             file={file}
-            key={file.id}
-            onRemove={() => handleRemoveUploadedFile(file.id)}
+            key={index}
+            onRemove={() => handleRemoveUploadedFile(index)}
             isUploading={false}
           />
         ))}
         {contextStoreCurrentObjectMetadataItemId && (
           <AgentChatContextRecordPreview
-            agentId={agentId}
             contextStoreCurrentObjectMetadataItemId={
               contextStoreCurrentObjectMetadataItemId
             }

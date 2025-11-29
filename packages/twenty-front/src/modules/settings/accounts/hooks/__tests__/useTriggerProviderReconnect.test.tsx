@@ -1,9 +1,8 @@
 import { act, renderHook } from '@testing-library/react';
-import { ReactNode } from 'react';
+import { type ReactNode } from 'react';
 import { RecoilRoot } from 'recoil';
 
-import { SettingsPath } from '@/types/SettingsPath';
-import { ConnectedAccountProvider } from 'twenty-shared/types';
+import { ConnectedAccountProvider, SettingsPath } from 'twenty-shared/types';
 import {
   CalendarChannelVisibility,
   MessageChannelVisibility,
@@ -116,7 +115,9 @@ describe('useTriggerProviderReconnect', () => {
 
       expect(mockTriggerApisOAuth).toHaveBeenCalledWith(
         ConnectedAccountProvider.GOOGLE,
-        undefined,
+        {
+          redirectLocation: '/settings/accounts',
+        },
       );
       expect(mockNavigate).not.toHaveBeenCalled();
     });
@@ -134,7 +135,9 @@ describe('useTriggerProviderReconnect', () => {
 
       expect(mockTriggerApisOAuth).toHaveBeenCalledWith(
         ConnectedAccountProvider.MICROSOFT,
-        undefined,
+        {
+          redirectLocation: '/settings/accounts',
+        },
       );
       expect(mockNavigate).not.toHaveBeenCalled();
     });
@@ -161,7 +164,10 @@ describe('useTriggerProviderReconnect', () => {
 
       expect(mockTriggerApisOAuth).toHaveBeenCalledWith(
         ConnectedAccountProvider.GOOGLE,
-        options,
+        {
+          ...options,
+          redirectLocation: '/settings/accounts',
+        },
       );
       expect(mockNavigate).not.toHaveBeenCalled();
     });
@@ -187,7 +193,10 @@ describe('useTriggerProviderReconnect', () => {
 
       expect(mockTriggerApisOAuth).toHaveBeenCalledWith(
         ConnectedAccountProvider.MICROSOFT,
-        options,
+        {
+          ...options,
+          redirectLocation: '/settings/accounts',
+        },
       );
       expect(mockNavigate).not.toHaveBeenCalled();
     });
@@ -206,7 +215,9 @@ describe('useTriggerProviderReconnect', () => {
 
       expect(mockTriggerApisOAuth).toHaveBeenCalledWith(
         ConnectedAccountProvider.GOOGLE,
-        undefined,
+        {
+          redirectLocation: '/settings/accounts',
+        },
       );
       expect(mockNavigate).not.toHaveBeenCalled();
     });
@@ -231,7 +242,9 @@ describe('useTriggerProviderReconnect', () => {
 
       expect(mockTriggerApisOAuth).toHaveBeenCalledWith(
         ConnectedAccountProvider.GOOGLE,
-        undefined,
+        {
+          redirectLocation: '/settings/accounts',
+        },
       );
     });
   });

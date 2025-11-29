@@ -1,8 +1,11 @@
 import { ApolloError, gql, InMemoryCache } from '@apollo/client';
 import fetchMock, { enableFetchMocks } from 'jest-fetch-mock';
 
+import { DEFAULT_FAST_MODEL } from '@/ai/constants/DefaultFastModel';
+import { DEFAULT_SMART_MODEL } from '@/ai/constants/DefaultSmartModel';
+import { CUSTOM_WORKSPACE_APPLICATION_MOCK } from '@/object-metadata/hooks/__tests__/constants/CustomWorkspaceApplicationMock.test.constant';
 import { WorkspaceActivationStatus } from '~/generated/graphql';
-import { ApolloFactory, Options } from '../apollo.factory';
+import { ApolloFactory, type Options } from '../apollo.factory';
 
 enableFetchMocks();
 
@@ -12,7 +15,10 @@ jest.mock('@/auth/services/AuthService', () => {
     ...initialAuthService,
     renewToken: jest.fn().mockReturnValue(
       Promise.resolve({
-        accessToken: { token: 'newAccessToken', expiresAt: '' },
+        accessOrWorkspaceAgnosticToken: {
+          token: 'newAccessToken',
+          expiresAt: '',
+        },
         refreshToken: { token: 'newRefreshToken', expiresAt: '' },
       }),
     ),
@@ -46,6 +52,9 @@ const mockWorkspace = {
   isMicrosoftAuthEnabled: false,
   isPasswordAuthEnabled: false,
   isCustomDomainEnabled: false,
+  isGoogleAuthBypassEnabled: false,
+  isPasswordAuthBypassEnabled: false,
+  isMicrosoftAuthBypassEnabled: false,
   hasValidEnterpriseKey: false,
   subdomain: 'test',
   customDomain: 'test.com',
@@ -53,6 +62,13 @@ const mockWorkspace = {
     subdomainUrl: 'test.com',
     customUrl: 'test.com',
   },
+  isTwoFactorAuthenticationEnforced: false,
+  trashRetentionDays: 14,
+  fastModel: DEFAULT_FAST_MODEL,
+  smartModel: DEFAULT_SMART_MODEL,
+  routerModel: 'auto',
+  workspaceCustomApplication: CUSTOM_WORKSPACE_APPLICATION_MOCK,
+  workspaceCustomApplicationId: CUSTOM_WORKSPACE_APPLICATION_MOCK.id,
 };
 
 const createMockOptions = (): Options<any> => ({
@@ -63,6 +79,7 @@ const createMockOptions = (): Options<any> => ({
   isDebugMode: true,
   onError: mockOnError,
   onNetworkError: mockOnNetworkError,
+  appVersion: '1.0.0',
 });
 
 const makeRequest = async () => {

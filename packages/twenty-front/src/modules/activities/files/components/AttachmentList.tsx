@@ -1,21 +1,23 @@
 import styled from '@emotion/styled';
-import { lazy, ReactElement, Suspense, useState } from 'react';
+import { lazy, type ReactElement, Suspense, useState } from 'react';
 import { createPortal } from 'react-dom';
 
 import { DropZone } from '@/activities/files/components/DropZone';
 import { useUploadAttachmentFile } from '@/activities/files/hooks/useUploadAttachmentFile';
-import { Attachment } from '@/activities/files/types/Attachment';
+import { type Attachment } from '@/activities/files/types/Attachment';
 import { downloadFile } from '@/activities/files/utils/downloadFile';
-import { ActivityTargetableObject } from '@/activities/types/ActivityTargetableEntity';
+import { type ActivityTargetableObject } from '@/activities/types/ActivityTargetableEntity';
 import { isAttachmentPreviewEnabledState } from '@/client-config/states/isAttachmentPreviewEnabledState';
 import { Modal } from '@/ui/layout/modal/components/Modal';
 import { useRecoilValue } from 'recoil';
 
 import { ActivityList } from '@/activities/components/ActivityList';
+import { useHasPermissionFlag } from '@/settings/roles/hooks/useHasPermissionFlag';
 import { useModal } from '@/ui/layout/modal/hooks/useModal';
 import { ScrollWrapper } from '@/ui/utilities/scroll/components/ScrollWrapper';
 import { IconDownload, IconX } from 'twenty-ui/display';
 import { IconButton } from 'twenty-ui/input';
+import { PermissionFlagType } from '~/generated-metadata/graphql';
 import { AttachmentRow } from './AttachmentRow';
 
 const DocumentViewer = lazy(() =>
@@ -28,7 +30,7 @@ type AttachmentListProps = {
   targetableObject: ActivityTargetableObject;
   title: string;
   attachments: Attachment[];
-  button?: ReactElement | false;
+  button?: ReactElement | false | null;
 };
 
 const StyledContainer = styled.div`
@@ -131,6 +133,14 @@ export const AttachmentList = ({
     isAttachmentPreviewEnabledState,
   );
 
+  const hasDownloadPermission = useHasPermissionFlag(
+    PermissionFlagType.DOWNLOAD_FILE,
+  );
+
+  const hasUploadPermission = useHasPermissionFlag(
+    PermissionFlagType.UPLOAD_FILE,
+  );
+
   const { openModal, closeModal } = useModal();
 
   const onUploadFile = async (file: File) => {
@@ -169,8 +179,10 @@ export const AttachmentList = ({
             </StyledTitle>
             {button}
           </StyledTitleBar>
-          <StyledDropZoneContainer onDragEnter={() => setIsDraggingFile(true)}>
-            {isDraggingFile ? (
+          <StyledDropZoneContainer
+            onDragEnter={() => hasUploadPermission && setIsDraggingFile(true)}
+          >
+            {isDraggingFile && hasUploadPermission ? (
               <DropZone
                 setIsDraggingFile={setIsDraggingFile}
                 onUploadFiles={onUploadFiles}
@@ -204,11 +216,13 @@ export const AttachmentList = ({
               <StyledHeader>
                 <StyledModalTitle>{previewedAttachment.name}</StyledModalTitle>
                 <StyledButtonContainer>
-                  <IconButton
-                    Icon={IconDownload}
-                    onClick={handleDownload}
-                    size="small"
-                  />
+                  {hasDownloadPermission && (
+                    <IconButton
+                      Icon={IconDownload}
+                      onClick={handleDownload}
+                      size="small"
+                    />
+                  )}
                   <IconButton
                     Icon={IconX}
                     onClick={handleClosePreview}

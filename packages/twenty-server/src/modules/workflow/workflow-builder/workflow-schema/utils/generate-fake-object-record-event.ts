@@ -1,8 +1,8 @@
 import { DatabaseEventAction } from 'src/engine/api/graphql/graphql-query-runner/enums/database-event-action';
-import { ObjectMetadataInfo } from 'src/modules/workflow/common/workspace-services/workflow-common.workspace-service';
+import { type ObjectMetadataInfo } from 'src/modules/workflow/common/workspace-services/workflow-common.workspace-service';
 import {
-  BaseOutputSchema,
-  RecordOutputSchema,
+  type FieldOutputSchema,
+  type RecordOutputSchema,
 } from 'src/modules/workflow/workflow-builder/workflow-schema/types/output-schema.type';
 import { generateObjectRecordFields } from 'src/modules/workflow/workflow-builder/workflow-schema/utils/generate-object-record-fields';
 
@@ -13,6 +13,7 @@ const generateFakeObjectRecordEventWithPrefix = ({
   objectMetadataInfo: ObjectMetadataInfo;
   prefix: string;
 }): RecordOutputSchema => {
+  const { flatObjectMetadata } = objectMetadataInfo;
   const recordFields = generateObjectRecordFields({ objectMetadataInfo });
   const prefixedRecordFields = Object.entries(recordFields).reduce(
     (acc, [key, value]) => {
@@ -20,19 +21,17 @@ const generateFakeObjectRecordEventWithPrefix = ({
 
       return acc;
     },
-    {} as BaseOutputSchema,
+    {} as Record<string, FieldOutputSchema>,
   );
 
   return {
     object: {
       isLeaf: true,
-      icon:
-        objectMetadataInfo.objectMetadataItemWithFieldsMaps.icon ?? undefined,
-      label: objectMetadataInfo.objectMetadataItemWithFieldsMaps.labelSingular,
-      value: objectMetadataInfo.objectMetadataItemWithFieldsMaps.description,
-      nameSingular:
-        objectMetadataInfo.objectMetadataItemWithFieldsMaps.nameSingular,
+      icon: flatObjectMetadata.icon ?? undefined,
+      label: flatObjectMetadata.labelSingular,
+      value: flatObjectMetadata.description,
       fieldIdName: `${prefix}.id`,
+      objectMetadataId: flatObjectMetadata.id,
     },
     fields: prefixedRecordFields,
     _outputSchemaType: 'RECORD',
@@ -46,6 +45,7 @@ export const generateFakeObjectRecordEvent = (
   switch (action) {
     case DatabaseEventAction.CREATED:
     case DatabaseEventAction.UPDATED:
+    case DatabaseEventAction.UPSERTED:
       return generateFakeObjectRecordEventWithPrefix({
         objectMetadataInfo,
         prefix: 'properties.after',

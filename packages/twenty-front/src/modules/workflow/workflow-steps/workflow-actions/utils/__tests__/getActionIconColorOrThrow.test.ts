@@ -1,26 +1,39 @@
-import { WorkflowActionType } from '@/workflow/types/Workflow';
-import { Theme } from '@emotion/react';
-import { COLOR, GRAY_SCALE } from 'twenty-ui/theme';
+import { type WorkflowActionType } from '@/workflow/types/Workflow';
+import { type Theme } from '@emotion/react';
+import { COLOR_LIGHT, GRAY_SCALE_LIGHT } from 'twenty-ui/theme';
 import { getActionIconColorOrThrow } from '../getActionIconColorOrThrow';
 
 const mockTheme: Theme = {
   color: {
-    orange: COLOR.orange,
-    blue: COLOR.blue,
-    pink: COLOR.pink,
+    orange: COLOR_LIGHT.orange,
+    pink: COLOR_LIGHT.pink,
+    red: COLOR_LIGHT.red,
   },
   font: {
     color: {
-      tertiary: GRAY_SCALE.gray40,
+      tertiary: GRAY_SCALE_LIGHT.gray9,
     },
   },
 } as Theme;
 
 describe('getActionIconColorOrThrow', () => {
-  it('should return orange color for CODE action type', () => {
-    expect(
-      getActionIconColorOrThrow({ theme: mockTheme, actionType: 'CODE' }),
-    ).toBe(mockTheme.color.orange);
+  describe('action types that return red color', () => {
+    const coreActionTypes: WorkflowActionType[] = [
+      'CODE',
+      'HTTP_REQUEST',
+      'SEND_EMAIL',
+    ];
+
+    coreActionTypes.forEach((actionType) => {
+      it(`should return red color for ${actionType} action type`, () => {
+        const result = getActionIconColorOrThrow({
+          theme: mockTheme,
+          actionType,
+        });
+
+        expect(result).toBe(mockTheme.color.red);
+      });
+    });
   });
 
   describe('action types that return tertiary font color', () => {
@@ -29,7 +42,6 @@ describe('getActionIconColorOrThrow', () => {
       'UPDATE_RECORD',
       'DELETE_RECORD',
       'FIND_RECORDS',
-      'FORM',
     ];
 
     recordActionTypes.forEach((actionType) => {
@@ -44,14 +56,14 @@ describe('getActionIconColorOrThrow', () => {
     });
   });
 
-  describe('action types that return blue color', () => {
-    it('should return blue color for SEND_EMAIL action type', () => {
+  describe('action types that return orange color', () => {
+    it('should return orange color for FORM action type', () => {
       const result = getActionIconColorOrThrow({
         theme: mockTheme,
-        actionType: 'SEND_EMAIL',
+        actionType: 'FORM',
       });
 
-      expect(result).toBe(mockTheme.color.blue);
+      expect(result).toBe(mockTheme.color.orange);
     });
   });
 
@@ -67,13 +79,13 @@ describe('getActionIconColorOrThrow', () => {
   });
 
   describe('FILTER action type', () => {
-    it('should throw an error for FILTER action type', () => {
+    it('should return green color for FILTER action type', () => {
       const result = getActionIconColorOrThrow({
         theme: mockTheme,
         actionType: 'FILTER',
       });
 
-      expect(result).toBe(mockTheme.font.color.tertiary);
+      expect(result).toBe(mockTheme.color.green12);
     });
   });
 
@@ -81,13 +93,13 @@ describe('getActionIconColorOrThrow', () => {
     it('should use the provided theme colors correctly', () => {
       const customTheme: Theme = {
         color: {
-          orange: COLOR.red,
-          blue: COLOR.purple,
-          pink: COLOR.turquoise,
+          red: COLOR_LIGHT.red,
+          orange: COLOR_LIGHT.orange,
+          pink: COLOR_LIGHT.turquoise,
         },
         font: {
           color: {
-            tertiary: GRAY_SCALE.gray50,
+            tertiary: GRAY_SCALE_LIGHT.gray11,
           },
         },
       } as Theme;
@@ -97,28 +109,28 @@ describe('getActionIconColorOrThrow', () => {
           theme: customTheme,
           actionType: 'CODE',
         }),
-      ).toBe(COLOR.red);
+      ).toBe(COLOR_LIGHT.red);
 
       expect(
         getActionIconColorOrThrow({
           theme: customTheme,
           actionType: 'SEND_EMAIL',
         }),
-      ).toBe(COLOR.purple);
+      ).toBe(COLOR_LIGHT.red);
 
       expect(
         getActionIconColorOrThrow({
           theme: customTheme,
           actionType: 'AI_AGENT',
         }),
-      ).toBe(COLOR.turquoise);
+      ).toBe(COLOR_LIGHT.turquoise);
 
       expect(
         getActionIconColorOrThrow({
           theme: customTheme,
           actionType: 'CREATE_RECORD',
         }),
-      ).toBe(GRAY_SCALE.gray50);
+      ).toBe(GRAY_SCALE_LIGHT.gray11);
     });
   });
 
@@ -158,12 +170,12 @@ describe('getActionIconColorOrThrow', () => {
       });
 
       expect(result1).toBe(result2);
-      expect(result1).toBe(mockTheme.color.orange);
+      expect(result1).toBe(mockTheme.color.red);
     });
   });
 
   describe('color grouping logic', () => {
-    it('should group CODE and HTTP_REQUEST actions with orange color', () => {
+    it('should group CODE and HTTP_REQUEST actions with red color', () => {
       const orangeActions: WorkflowActionType[] = ['CODE', 'HTTP_REQUEST'];
 
       orangeActions.forEach((actionType) => {
@@ -171,7 +183,7 @@ describe('getActionIconColorOrThrow', () => {
           theme: mockTheme,
           actionType,
         });
-        expect(result).toBe(mockTheme.color.orange);
+        expect(result).toBe(mockTheme.color.red);
       });
     });
 
@@ -181,7 +193,6 @@ describe('getActionIconColorOrThrow', () => {
         'UPDATE_RECORD',
         'DELETE_RECORD',
         'FIND_RECORDS',
-        'FORM',
       ];
 
       recordActions.forEach((actionType) => {
@@ -202,13 +213,13 @@ describe('getActionIconColorOrThrow', () => {
       expect(tertiaryResult).toBe(mockTheme.font.color.tertiary);
     });
 
-    it('should return blue color for SEND_EMAIL action type', () => {
+    it('should return red color for SEND_EMAIL action type', () => {
       expect(
         getActionIconColorOrThrow({
           theme: mockTheme,
           actionType: 'SEND_EMAIL',
         }),
-      ).toBe(mockTheme.color.blue);
+      ).toBe(mockTheme.color.red);
     });
 
     it('should return pink color for AI_AGENT action type', () => {
@@ -220,49 +231,49 @@ describe('getActionIconColorOrThrow', () => {
     it('should use the provided theme colors correctly', () => {
       const customTheme: Theme = {
         color: {
-          orange: COLOR.red,
-          blue: COLOR.purple,
-          pink: COLOR.turquoise,
+          red: COLOR_LIGHT.red,
+          orange: COLOR_LIGHT.orange,
+          pink: COLOR_LIGHT.turquoise,
         },
         font: {
           color: {
-            tertiary: GRAY_SCALE.gray50,
+            tertiary: GRAY_SCALE_LIGHT.gray11,
           },
         },
       } as Theme;
 
       expect(
         getActionIconColorOrThrow({ theme: customTheme, actionType: 'CODE' }),
-      ).toBe(COLOR.red);
+      ).toBe(COLOR_LIGHT.red);
       expect(
         getActionIconColorOrThrow({
           theme: customTheme,
           actionType: 'SEND_EMAIL',
         }),
-      ).toBe(COLOR.purple);
+      ).toBe(COLOR_LIGHT.red);
       expect(
         getActionIconColorOrThrow({
           theme: customTheme,
           actionType: 'AI_AGENT',
         }),
-      ).toBe(COLOR.turquoise);
+      ).toBe(COLOR_LIGHT.turquoise);
       expect(
         getActionIconColorOrThrow({
           theme: customTheme,
           actionType: 'CREATE_RECORD',
         }),
-      ).toBe(GRAY_SCALE.gray50);
+      ).toBe(GRAY_SCALE_LIGHT.gray11);
     });
 
-    it('should return undefined when blue color is missing for SEND_EMAIL action', () => {
+    it('should return undefined when red color is missing for SEND_EMAIL action', () => {
       const themeWithoutBlue: Theme = {
         color: {
-          orange: COLOR.orange,
-          pink: COLOR.pink,
+          orange: COLOR_LIGHT.orange,
+          pink: COLOR_LIGHT.pink,
         },
         font: {
           color: {
-            tertiary: GRAY_SCALE.gray40,
+            tertiary: GRAY_SCALE_LIGHT.gray9,
           },
         },
       } as Theme;

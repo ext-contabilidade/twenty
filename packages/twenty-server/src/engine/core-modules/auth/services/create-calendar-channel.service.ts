@@ -2,11 +2,13 @@ import { Injectable } from '@nestjs/common';
 
 import { v4 } from 'uuid';
 
-import { WorkspaceEntityManager } from 'src/engine/twenty-orm/entity-manager/workspace-entity-manager';
+import { type WorkspaceEntityManager } from 'src/engine/twenty-orm/entity-manager/workspace-entity-manager';
 import { TwentyORMGlobalManager } from 'src/engine/twenty-orm/twenty-orm-global.manager';
 import {
+  CalendarChannelSyncStage,
+  CalendarChannelSyncStatus,
   CalendarChannelVisibility,
-  CalendarChannelWorkspaceEntity,
+  type CalendarChannelWorkspaceEntity,
 } from 'src/modules/calendar/common/standard-objects/calendar-channel.workspace-entity';
 
 export type CreateCalendarChannelInput = {
@@ -47,6 +49,8 @@ export class CreateCalendarChannelService {
         handle,
         visibility:
           calendarVisibility || CalendarChannelVisibility.SHARE_EVERYTHING,
+        syncStatus: CalendarChannelSyncStatus.NOT_SYNCED,
+        syncStage: CalendarChannelSyncStage.PENDING_CONFIGURATION,
       },
       {},
       manager,

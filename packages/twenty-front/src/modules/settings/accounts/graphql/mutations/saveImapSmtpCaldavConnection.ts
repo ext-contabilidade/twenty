@@ -2,10 +2,10 @@ import gql from 'graphql-tag';
 
 export const SAVE_IMAP_SMTP_CALDAV_ACCOUNT = gql`
   mutation SaveImapSmtpCaldavAccount(
-    $accountOwnerId: String!
+    $accountOwnerId: UUID!
     $handle: String!
     $connectionParameters: EmailAccountConnectionParameters!
-    $id: String
+    $id: UUID
   ) {
     saveImapSmtpCaldavAccount(
       accountOwnerId: $accountOwnerId
@@ -14,6 +14,7 @@ export const SAVE_IMAP_SMTP_CALDAV_ACCOUNT = gql`
       id: $id
     ) {
       success
+      connectedAccountId
     }
   }
 `;

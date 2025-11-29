@@ -1,19 +1,22 @@
-import { FieldMetadataType } from 'twenty-shared/types';
+import { FieldMetadataType, RelationType } from 'twenty-shared/types';
 
-import { FieldMetadataEntity } from 'src/engine/metadata-modules/field-metadata/field-metadata.entity';
+import { type FlatFieldMetadata } from 'src/engine/metadata-modules/flat-field-metadata/types/flat-field-metadata.type';
+import { isFlatFieldMetadataOfType } from 'src/engine/metadata-modules/flat-field-metadata/utils/is-flat-field-metadata-of-type.util';
 
-const isManyToOneRelationField = (field: FieldMetadataEntity) =>
-  (field as FieldMetadataEntity<FieldMetadataType.RELATION>).settings
-    ?.relationType === 'MANY_TO_ONE';
+const isManyToOneRelationField = (field: FlatFieldMetadata) => {
+  if (isFlatFieldMetadataOfType(field, FieldMetadataType.RELATION)) {
+    return field.settings?.relationType === RelationType.MANY_TO_ONE;
+  }
 
-// TODO refactor
-export const shouldGenerateFieldFakeValue = <T extends FieldMetadataType>(
-  field: FieldMetadataEntity<T>,
-) => {
+  return false;
+};
+
+const EXCLUDED_SYSTEM_FIELDS = ['searchVector', 'position'];
+
+export const shouldGenerateFieldFakeValue = (field: FlatFieldMetadata) => {
   return (
     field.isActive &&
-    (!field.isSystem || field.name === 'id' || field.name === 'userEmail') &&
-    (field.type !== FieldMetadataType.RELATION ||
-      isManyToOneRelationField(field as unknown as FieldMetadataEntity))
+    !(EXCLUDED_SYSTEM_FIELDS.includes(field.name) && field.isSystem) &&
+    !isManyToOneRelationField(field)
   );
 };

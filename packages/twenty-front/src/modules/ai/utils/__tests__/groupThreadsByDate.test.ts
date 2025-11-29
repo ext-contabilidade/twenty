@@ -1,9 +1,8 @@
-import { AgentChatThread } from '~/generated-metadata/graphql';
+import { type AgentChatThread } from '~/generated-metadata/graphql';
 import { groupThreadsByDate } from '../groupThreadsByDate';
 
 describe('groupThreadsByDate', () => {
   const baseThread: Omit<AgentChatThread, 'createdAt' | 'id'> = {
-    agentId: 'agent-1',
     title: 'Test Thread',
     updatedAt: new Date().toISOString(),
   };

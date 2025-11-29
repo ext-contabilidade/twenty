@@ -1,14 +1,17 @@
-import { Test, TestingModule } from '@nestjs/testing';
+import { Test, type TestingModule } from '@nestjs/testing';
+import { getRepositoryToken } from '@nestjs/typeorm';
 
+import { AiAgentRoleService } from 'src/engine/metadata-modules/ai/ai-agent-role/ai-agent-role.service';
 import {
   AgentException,
   AgentExceptionCode,
-} from 'src/engine/metadata-modules/agent/agent.exception';
-import { AgentResolver } from 'src/engine/metadata-modules/agent/agent.resolver';
-import { AgentService } from 'src/engine/metadata-modules/agent/agent.service';
-
-// Mock the agent service
-jest.mock('../../../../../src/engine/metadata-modules/agent/agent.service');
+} from 'src/engine/metadata-modules/ai/ai-agent/agent.exception';
+import { AgentResolver } from 'src/engine/metadata-modules/ai/ai-agent/agent.resolver';
+import { AgentService } from 'src/engine/metadata-modules/ai/ai-agent/agent.service';
+import { AgentEntity } from 'src/engine/metadata-modules/ai/ai-agent/entities/agent.entity';
+import { AgentChatService } from 'src/engine/metadata-modules/ai/ai-chat/services/agent-chat.service';
+import { PermissionsService } from 'src/engine/metadata-modules/permissions/permissions.service';
+import { RoleTargetsEntity } from 'src/engine/metadata-modules/role/role-targets.entity';
 
 // Mock the guards and decorators
 jest.mock('../../../../../src/engine/guards/feature-flag.guard', () => ({
@@ -39,6 +42,42 @@ describe('agentResolver', () => {
           useValue: {
             findOneAgent: jest.fn(),
             updateOneAgent: jest.fn(),
+          },
+        },
+        {
+          provide: getRepositoryToken(AgentEntity),
+          useValue: {
+            find: jest.fn(),
+            findOne: jest.fn(),
+            save: jest.fn(),
+            softDelete: jest.fn(),
+          },
+        },
+        {
+          provide: getRepositoryToken(RoleTargetsEntity),
+          useValue: {
+            findOne: jest.fn(),
+          },
+        },
+        {
+          provide: AgentChatService,
+          useValue: {
+            createThread: jest.fn(),
+          },
+        },
+        {
+          provide: AiAgentRoleService,
+          useValue: {
+            assignRoleToAgent: jest.fn(),
+            removeRoleFromAgent: jest.fn(),
+          },
+        },
+        {
+          provide: PermissionsService,
+          useValue: {
+            userHasWorkspaceSettingPermission: jest
+              .fn()
+              .mockResolvedValue(true),
           },
         },
       ],
@@ -82,10 +121,9 @@ describe('agentResolver', () => {
       } as any);
 
       // Verify the service was called with the correct parameters
-      expect(agentService.findOneAgent).toHaveBeenCalledWith(
-        testAgentId,
-        workspaceId,
-      );
+      expect(agentService.findOneAgent).toHaveBeenCalledWith(workspaceId, {
+        id: testAgentId,
+      });
 
       // Verify the result matches our expectations
       expect(result).toBeDefined();

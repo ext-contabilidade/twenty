@@ -1,9 +1,10 @@
+import { type MessageDescriptor } from '@lingui/core';
 import {
-  ASTNode,
+  type ASTNode,
   GraphQLError,
-  GraphQLFormattedError,
-  Source,
-  SourceLocation,
+  type GraphQLFormattedError,
+  type Source,
+  type SourceLocation,
 } from 'graphql';
 
 import { CustomException } from 'src/utils/custom-exception';
@@ -12,7 +13,7 @@ declare module 'graphql' {
   export interface GraphQLErrorExtensions {
     exception?: {
       code?: string;
-      stacktrace?: ReadonlyArray<string>;
+      stackTrace?: ReadonlyArray<string>;
     };
   }
 }
@@ -30,10 +31,11 @@ export enum ErrorCode {
   CONFLICT = 'CONFLICT',
   TIMEOUT = 'TIMEOUT',
   INTERNAL_SERVER_ERROR = 'INTERNAL_SERVER_ERROR',
+  METADATA_VALIDATION_FAILED = 'METADATA_VALIDATION_FAILED',
 }
 
 type RestrictedGraphQLErrorExtensions = {
-  userFriendlyMessage?: string;
+  userFriendlyMessage?: MessageDescriptor;
   subCode?: string;
 };
 
@@ -121,8 +123,8 @@ export class SyntaxError extends BaseGraphQLError {
 }
 
 export class ValidationError extends BaseGraphQLError {
-  constructor(message: string) {
-    super(message, ErrorCode.GRAPHQL_VALIDATION_FAILED);
+  constructor(message: string, extensions?: BaseGraphQLError['extensions']) {
+    super(message, ErrorCode.GRAPHQL_VALIDATION_FAILED, extensions);
 
     Object.defineProperty(this, 'name', { value: 'ValidationError' });
   }
@@ -170,50 +172,17 @@ export class ForbiddenError extends BaseGraphQLError {
   }
 }
 
-export class PersistedQueryNotFoundError extends BaseGraphQLError {
-  constructor(customException: CustomException);
-
-  constructor(message?: string, extensions?: RestrictedGraphQLErrorExtensions);
-
-  constructor(
-    messageOrException?: string | CustomException,
-    extensions?: RestrictedGraphQLErrorExtensions,
-  ) {
-    super(
-      messageOrException || 'PersistedQueryNotFound',
-      ErrorCode.PERSISTED_QUERY_NOT_FOUND,
-      extensions,
-    );
-    Object.defineProperty(this, 'name', {
-      value: 'PersistedQueryNotFoundError',
-    });
-  }
-}
-
-export class PersistedQueryNotSupportedError extends BaseGraphQLError {
-  constructor(
-    messageOrException?: string | CustomException,
-    extensions?: RestrictedGraphQLErrorExtensions,
-  ) {
-    super(
-      messageOrException || 'PersistedQueryNotSupported',
-      ErrorCode.PERSISTED_QUERY_NOT_SUPPORTED,
-      extensions,
-    );
-    Object.defineProperty(this, 'name', {
-      value: 'PersistedQueryNotSupportedError',
-    });
-  }
-}
-
 export class UserInputError extends BaseGraphQLError {
   constructor(exception: CustomException);
 
-  constructor(message: string, extensions?: RestrictedGraphQLErrorExtensions);
+  constructor(
+    message: string,
+    extensions?: RestrictedGraphQLErrorExtensions & { isExpected?: boolean },
+  );
 
   constructor(
     messageOrException: string | CustomException,
-    extensions?: RestrictedGraphQLErrorExtensions,
+    extensions?: RestrictedGraphQLErrorExtensions & { isExpected?: boolean },
   ) {
     super(messageOrException, ErrorCode.BAD_USER_INPUT, extensions);
     Object.defineProperty(this, 'name', { value: 'UserInputError' });

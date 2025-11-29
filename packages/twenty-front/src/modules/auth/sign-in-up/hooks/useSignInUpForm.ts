@@ -17,7 +17,10 @@ const makeValidationSchema = (signInUpStep: SignInUpStep) =>
   z
     .object({
       exist: z.boolean(),
-      email: z.string().trim().email('Email must be a valid email'),
+      email: z
+        .string()
+        .trim()
+        .pipe(z.email({ error: 'Email must be a valid email' })),
       password:
         signInUpStep === SignInUpStep.Password
           ? z
@@ -61,5 +64,5 @@ export const useSignInUpForm = () => {
       form.setValue('password', 'tim@apple.dev');
     }
   }, [form, isDeveloperDefaultSignInPrefilled, prefilledEmail]);
-  return { form: form };
+  return { form };
 };

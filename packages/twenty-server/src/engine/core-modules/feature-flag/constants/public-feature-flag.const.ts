@@ -22,6 +22,23 @@ export const PUBLIC_FEATURE_FLAGS: PublicFeatureFlag[] = [
         'https://twenty.com/images/lab/is-imap-smtp-caldav-enabled.png',
     },
   },
+  {
+    key: FeatureFlagKey.IS_MESSAGE_FOLDER_CONTROL_ENABLED,
+    metadata: {
+      label: 'Message Folder Control',
+      description: 'Control which folders are synced',
+      imagePath:
+        'https://twenty.com/images/lab/is-message-folder-control-enabled.png',
+    },
+  },
+  {
+    key: FeatureFlagKey.IS_PAGE_LAYOUT_ENABLED,
+    metadata: {
+      label: 'Dashboards',
+      description: 'Enable dashboards',
+      imagePath: 'https://twenty.com/images/lab/is-dashboards-enabled.png',
+    },
+  },
   ...(process.env.CLOUDFLARE_API_KEY
     ? [
         // {

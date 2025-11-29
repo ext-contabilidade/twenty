@@ -1,7 +1,11 @@
-import { CanActivate, ExecutionContext, Injectable } from '@nestjs/common';
+import {
+  type CanActivate,
+  type ExecutionContext,
+  Injectable,
+} from '@nestjs/common';
 import { GqlExecutionContext } from '@nestjs/graphql';
 
-import { t } from '@lingui/core/macro';
+import { msg } from '@lingui/core/macro';
 
 import {
   CaptchaException,
@@ -37,7 +41,9 @@ export class CaptchaGuard implements CanActivate {
       throw new CaptchaException(
         'Invalid Captcha, please try another device',
         CaptchaExceptionCode.INVALID_CAPTCHA,
-        { userFriendlyMessage: t`Invalid Captcha, please try another device` },
+        {
+          userFriendlyMessage: msg`Invalid Captcha, please try another device`,
+        },
       );
     }
   }

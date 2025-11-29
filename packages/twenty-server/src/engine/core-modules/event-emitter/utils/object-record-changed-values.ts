@@ -1,22 +1,58 @@
 import deepEqual from 'deep-equal';
-import { FieldMetadataType } from 'twenty-shared/types';
+import { STANDARD_OBJECT_IDS } from 'twenty-shared/metadata';
+import { FieldMetadataType, type ObjectRecord } from 'twenty-shared/types';
 
-import { ObjectRecord } from 'src/engine/api/graphql/workspace-query-builder/interfaces/object-record.interface';
+import { type FlatEntityMaps } from 'src/engine/metadata-modules/flat-entity/types/flat-entity-maps.type';
+import { type FlatFieldMetadata } from 'src/engine/metadata-modules/flat-field-metadata/types/flat-field-metadata.type';
+import { buildFieldMapsFromFlatObjectMetadata } from 'src/engine/metadata-modules/flat-field-metadata/utils/build-field-maps-from-flat-object-metadata.util';
+import { type FlatObjectMetadata } from 'src/engine/metadata-modules/flat-object-metadata/types/flat-object-metadata.type';
 
-import { ObjectMetadataItemWithFieldMaps } from 'src/engine/metadata-modules/types/object-metadata-item-with-field-maps';
+const isWorkflowVersionStepsOrTrigger = (
+  objectMetadataItem: FlatObjectMetadata,
+  key: string,
+) => {
+  return (
+    objectMetadataItem.standardId === STANDARD_OBJECT_IDS.workflowVersion &&
+    (key === 'steps' || key === 'trigger')
+  );
+};
+
+const isWorkflowAutomatedTriggerSettings = (
+  objectMetadataItem: Pick<FlatObjectMetadata, 'standardId'>,
+  key: string,
+) => {
+  return (
+    objectMetadataItem.standardId ===
+      STANDARD_OBJECT_IDS.workflowAutomatedTrigger && key === 'settings'
+  );
+};
 
 export const objectRecordChangedValues = (
   oldRecord: Partial<ObjectRecord>,
   newRecord: Partial<ObjectRecord>,
-  objectMetadataItem: ObjectMetadataItemWithFieldMaps,
+  objectMetadataItem: FlatObjectMetadata,
+  flatFieldMetadataMaps: FlatEntityMaps<FlatFieldMetadata>,
 ) => {
+  const { fieldIdByName } = buildFieldMapsFromFlatObjectMetadata(
+    flatFieldMetadataMaps,
+    objectMetadataItem,
+  );
+
   return Object.keys(newRecord).reduce(
     (acc, key) => {
-      const field =
-        objectMetadataItem.fieldsById[objectMetadataItem.fieldIdByName[key]];
+      const fieldId = fieldIdByName[key];
+      const field = fieldId ? flatFieldMetadataMaps.byId[fieldId] : undefined;
 
       const oldRecordValue = oldRecord[key];
       const newRecordValue = newRecord[key];
+
+      // Temporary ignore workflow json fields changes
+      if (
+        isWorkflowAutomatedTriggerSettings(objectMetadataItem, key) ||
+        isWorkflowVersionStepsOrTrigger(objectMetadataItem, key)
+      ) {
+        return acc;
+      }
 
       if (
         key === 'updatedAt' ||
@@ -31,7 +67,7 @@ export const objectRecordChangedValues = (
 
       return acc;
     },
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     {} as Record<string, { before: any; after: any }>,
   );

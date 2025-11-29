@@ -9,22 +9,30 @@ import {
   UpdateDateColumn,
 } from 'typeorm';
 
+import { SyncableEntity } from 'src/engine/workspace-manager/workspace-sync/interfaces/syncable-entity.interface';
+
 import { FieldPermissionEntity } from 'src/engine/metadata-modules/object-permission/field-permission/field-permission.entity';
 import { ObjectPermissionEntity } from 'src/engine/metadata-modules/object-permission/object-permission.entity';
+import { PermissionFlagEntity } from 'src/engine/metadata-modules/permission-flag/permission-flag.entity';
 import { RoleTargetsEntity } from 'src/engine/metadata-modules/role/role-targets.entity';
-import { SettingPermissionEntity } from 'src/engine/metadata-modules/setting-permission/setting-permission.entity';
 
 @Entity('role')
 @Unique('IDX_ROLE_LABEL_WORKSPACE_ID_UNIQUE', ['label', 'workspaceId'])
-export class RoleEntity {
+export class RoleEntity extends SyncableEntity implements Required<RoleEntity> {
   @PrimaryGeneratedColumn('uuid')
   id: string;
+
+  @Column({ nullable: true, type: 'uuid' })
+  standardId: string | null;
 
   @Column({ nullable: false })
   label: string;
 
   @Column({ nullable: false, default: false })
   canUpdateAllSettings: boolean;
+
+  @Column({ nullable: false, default: false })
+  canAccessAllTools: boolean;
 
   @Column({ nullable: false, default: false })
   canReadAllObjectRecords: boolean;
@@ -39,10 +47,10 @@ export class RoleEntity {
   canDestroyAllObjectRecords: boolean;
 
   @Column({ nullable: true, type: 'text' })
-  description: string;
+  description: string | null;
 
-  @Column({ nullable: true })
-  icon: string;
+  @Column({ nullable: true, type: 'varchar' })
+  icon: string | null;
 
   @Column({ nullable: false, type: 'uuid' })
   workspaceId: string;
@@ -55,6 +63,15 @@ export class RoleEntity {
 
   @Column({ nullable: false, default: true })
   isEditable: boolean;
+
+  @Column({ nullable: false, default: true })
+  canBeAssignedToUsers: boolean;
+
+  @Column({ nullable: false, default: true })
+  canBeAssignedToAgents: boolean;
+
+  @Column({ nullable: false, default: true })
+  canBeAssignedToApiKeys: boolean;
 
   @OneToMany(
     () => RoleTargetsEntity,
@@ -69,10 +86,10 @@ export class RoleEntity {
   objectPermissions: Relation<ObjectPermissionEntity[]>;
 
   @OneToMany(
-    () => SettingPermissionEntity,
-    (settingPermission: SettingPermissionEntity) => settingPermission.role,
+    () => PermissionFlagEntity,
+    (permissionFlag: PermissionFlagEntity) => permissionFlag.role,
   )
-  settingPermissions: Relation<SettingPermissionEntity[]>;
+  permissionFlags: Relation<PermissionFlagEntity[]>;
 
   @OneToMany(
     () => FieldPermissionEntity,

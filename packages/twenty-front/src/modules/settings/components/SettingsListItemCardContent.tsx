@@ -1,10 +1,10 @@
 import isPropValid from '@emotion/is-prop-valid';
 import { useTheme } from '@emotion/react';
 import styled from '@emotion/styled';
-import { ReactNode } from 'react';
+import { type ReactNode } from 'react';
 import { Link } from 'react-router-dom';
 import { isDefined } from 'twenty-shared/utils';
-import { IconChevronRight, IconComponent } from 'twenty-ui/display';
+import { IconChevronRight, type IconComponent } from 'twenty-ui/display';
 import { CardContent } from 'twenty-ui/layout';
 
 const StyledRow = styled(CardContent, {
@@ -33,9 +33,17 @@ const StyledRightContainer = styled.div`
 `;
 
 const StyledContent = styled.div`
-  flex: 1 0 auto;
+  flex: 1 1 0;
   display: flex;
   gap: ${({ theme }) => theme.spacing(1)};
+  min-width: 0;
+  overflow: hidden;
+`;
+
+const StyledLabel = styled.span`
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 `;
 
 const StyledDescription = styled.span`
@@ -81,7 +89,7 @@ export const SettingsListItemCardContent = ({
         />
       )}
       <StyledContent>
-        {label}
+        <StyledLabel>{label}</StyledLabel>
         {!!description && <StyledDescription>{description}</StyledDescription>}
       </StyledContent>
       <StyledRightContainer>

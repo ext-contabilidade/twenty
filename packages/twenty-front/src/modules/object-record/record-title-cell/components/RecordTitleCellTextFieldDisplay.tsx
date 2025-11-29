@@ -1,8 +1,9 @@
-import { FieldContext } from '@/object-record/record-field/contexts/FieldContext';
+import { FieldContext } from '@/object-record/record-field/ui/contexts/FieldContext';
 import { recordStoreFamilyState } from '@/object-record/record-store/states/recordStoreFamilyState';
 import { useRecordTitleCell } from '@/object-record/record-title-cell/hooks/useRecordTitleCell';
-import { RecordTitleCellContainerType } from '@/object-record/record-title-cell/types/RecordTitleCellContainerType';
-import { Theme, withTheme } from '@emotion/react';
+import { type RecordTitleCellContainerType } from '@/object-record/record-title-cell/types/RecordTitleCellContainerType';
+import { getRecordFieldInputInstanceId } from '@/object-record/utils/getRecordFieldInputId';
+import { withTheme, type Theme } from '@emotion/react';
 import styled from '@emotion/styled';
 import { useContext } from 'react';
 import { useRecoilValue } from 'recoil';
@@ -15,7 +16,7 @@ const StyledDiv = styled.div`
   color: ${({ theme }) => theme.font.color.primary};
   cursor: pointer;
   overflow: hidden;
-  height: 28px;
+  height: 24px;
   padding: ${({ theme }) => theme.spacing(0, 1.25)};
   box-sizing: border-box;
   display: flex;
@@ -50,7 +51,11 @@ export const RecordTitleCellSingleTextDisplayMode = ({
         openRecordTitleCell({
           recordId,
           fieldName: fieldDefinition.metadata.fieldName,
-          containerType,
+          instanceId: getRecordFieldInputInstanceId({
+            recordId,
+            fieldName: fieldDefinition.metadata.fieldName,
+            prefix: containerType,
+          }),
         });
       }}
     >

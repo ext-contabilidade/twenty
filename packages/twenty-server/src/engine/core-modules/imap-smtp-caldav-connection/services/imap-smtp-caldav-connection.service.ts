@@ -1,17 +1,18 @@
 import { Injectable, Logger } from '@nestjs/common';
 
+import { msg } from '@lingui/core/macro';
 import { ImapFlow } from 'imapflow';
 import { createTransport } from 'nodemailer';
 import { ConnectedAccountProvider } from 'twenty-shared/types';
 
 import { UserInputError } from 'src/engine/core-modules/graphql/utils/graphql-errors.util';
 import {
-  AccountType,
-  ConnectionParameters,
+  type AccountType,
+  type ConnectionParameters,
 } from 'src/engine/core-modules/imap-smtp-caldav-connection/types/imap-smtp-caldav-connection.type';
 import { TwentyORMGlobalManager } from 'src/engine/twenty-orm/twenty-orm-global.manager';
 import { CalDAVClient } from 'src/modules/calendar/calendar-event-import-manager/drivers/caldav/lib/caldav.client';
-import { ConnectedAccountWorkspaceEntity } from 'src/modules/connected-account/standard-objects/connected-account.workspace-entity';
+import { type ConnectedAccountWorkspaceEntity } from 'src/modules/connected-account/standard-objects/connected-account.workspace-entity';
 
 @Injectable()
 export class ImapSmtpCaldavService {
@@ -30,7 +31,7 @@ export class ImapSmtpCaldavService {
       port: params.port,
       secure: params.secure ?? true,
       auth: {
-        user: handle,
+        user: params.username ?? handle,
         pass: params.password,
       },
       logger: false,
@@ -59,8 +60,7 @@ export class ImapSmtpCaldavService {
         throw new UserInputError(
           'IMAP authentication failed. Please check your credentials.',
           {
-            userFriendlyMessage:
-              "We couldn't log in to your email account. Please check your email address and password, then try again.",
+            userFriendlyMessage: msg`We couldn't log in to your email account. Please check your email address and password, then try again.`,
           },
         );
       }
@@ -69,15 +69,13 @@ export class ImapSmtpCaldavService {
         throw new UserInputError(
           `IMAP connection refused. Please verify server and port.`,
           {
-            userFriendlyMessage:
-              "We couldn't connect to your email server. Please check your server settings and try again.",
+            userFriendlyMessage: msg`We couldn't connect to your email server. Please check your server settings and try again.`,
           },
         );
       }
 
       throw new UserInputError(`IMAP connection failed: ${error.message}`, {
-        userFriendlyMessage:
-          'We encountered an issue connecting to your email account. Please check your settings and try again.',
+        userFriendlyMessage: msg`We encountered an issue connecting to your email account. Please check your settings and try again.`,
       });
     } finally {
       if (client.authenticated) {
@@ -94,7 +92,7 @@ export class ImapSmtpCaldavService {
       host: params.host,
       port: params.port,
       auth: {
-        user: handle,
+        user: params.username ?? handle,
         pass: params.password,
       },
       tls: {
@@ -110,8 +108,7 @@ export class ImapSmtpCaldavService {
         error.stack,
       );
       throw new UserInputError(`SMTP connection failed: ${error.message}`, {
-        userFriendlyMessage:
-          "We couldn't connect to your outgoing email server. Please check your SMTP settings and try again.",
+        userFriendlyMessage: msg`We couldn't connect to your outgoing email server. Please check your SMTP settings and try again.`,
       });
     }
 
@@ -137,14 +134,12 @@ export class ImapSmtpCaldavService {
       );
       if (error.code === 'FailedToOpenSocket') {
         throw new UserInputError(`CALDAV connection failed: ${error.message}`, {
-          userFriendlyMessage:
-            "We couldn't connect to your CalDAV server. Please check your server settings and try again.",
+          userFriendlyMessage: msg`We couldn't connect to your CalDAV server. Please check your server settings and try again.`,
         });
       }
 
       throw new UserInputError(`CALDAV connection failed: ${error.message}`, {
-        userFriendlyMessage:
-          'Invalid credentials. Please check your username and password.',
+        userFriendlyMessage: msg`Invalid credentials. Please check your username and password.`,
       });
     }
 
@@ -171,8 +166,7 @@ export class ImapSmtpCaldavService {
     throw new UserInputError(
       'Invalid account type. Must be one of: IMAP, SMTP, CALDAV',
       {
-        userFriendlyMessage:
-          'Please select a valid connection type (IMAP, SMTP, or CalDAV) and try again.',
+        userFriendlyMessage: msg`Please select a valid connection type (IMAP, SMTP, or CalDAV) and try again.`,
       },
     );
   }

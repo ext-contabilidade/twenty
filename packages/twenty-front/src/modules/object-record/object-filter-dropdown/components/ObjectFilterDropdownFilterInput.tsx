@@ -6,20 +6,19 @@ import { ObjectFilterDropdownRecordSelect } from '@/object-record/object-filter-
 import { ObjectFilterDropdownSearchInput } from '@/object-record/object-filter-dropdown/components/ObjectFilterDropdownSearchInput';
 import { DropdownMenuSeparator } from '@/ui/layout/dropdown/components/DropdownMenuSeparator';
 
-import { ViewFilterOperand } from 'twenty-shared/src/types/ViewFilterOperand';
+import { ViewFilterOperand } from 'twenty-shared/types';
 
-import { getFilterTypeFromFieldType } from '@/object-metadata/utils/formatFieldMetadataItemsAsFilterDefinitions';
 import { ObjectFilterDropdownBooleanSelect } from '@/object-record/object-filter-dropdown/components/ObjectFilterDropdownBooleanSelect';
+import { ObjectFilterDropdownDateTimeInput } from '@/object-record/object-filter-dropdown/components/ObjectFilterDropdownDateTimeInput';
 import { ObjectFilterDropdownInnerSelectOperandDropdown } from '@/object-record/object-filter-dropdown/components/ObjectFilterDropdownInnerSelectOperandDropdown';
 import { ObjectFilterDropdownTextInput } from '@/object-record/object-filter-dropdown/components/ObjectFilterDropdownTextInput';
 import { ObjectFilterDropdownVectorSearchInput } from '@/object-record/object-filter-dropdown/components/ObjectFilterDropdownVectorSearchInput';
-import { DATE_FILTER_TYPES } from '@/object-record/object-filter-dropdown/constants/DateFilterTypes';
 import { NUMBER_FILTER_TYPES } from '@/object-record/object-filter-dropdown/constants/NumberFilterTypes';
 import { TEXT_FILTER_TYPES } from '@/object-record/object-filter-dropdown/constants/TextFilterTypes';
 import { fieldMetadataItemUsedInDropdownComponentSelector } from '@/object-record/object-filter-dropdown/states/fieldMetadataItemUsedInDropdownComponentSelector';
 import { selectedOperandInDropdownComponentState } from '@/object-record/object-filter-dropdown/states/selectedOperandInDropdownComponentState';
-import { useRecoilComponentValueV2 } from '@/ui/utilities/state/component-state/hooks/useRecoilComponentValueV2';
-import { isDefined } from 'twenty-shared/utils';
+import { useRecoilComponentValue } from '@/ui/utilities/state/component-state/hooks/useRecoilComponentValue';
+import { getFilterTypeFromFieldType, isDefined } from 'twenty-shared/utils';
 
 type ObjectFilterDropdownFilterInputProps = {
   filterDropdownId: string;
@@ -30,12 +29,12 @@ export const ObjectFilterDropdownFilterInput = ({
   filterDropdownId,
   recordFilterId,
 }: ObjectFilterDropdownFilterInputProps) => {
-  const fieldMetadataItemUsedInDropdown = useRecoilComponentValueV2(
+  const fieldMetadataItemUsedInDropdown = useRecoilComponentValue(
     fieldMetadataItemUsedInDropdownComponentSelector,
     filterDropdownId,
   );
 
-  const selectedOperandInDropdown = useRecoilComponentValueV2(
+  const selectedOperandInDropdown = useRecoilComponentValue(
     selectedOperandInDropdownComponentState,
     filterDropdownId,
   );
@@ -43,20 +42,20 @@ export const ObjectFilterDropdownFilterInput = ({
   const isOperandWithFilterValue =
     selectedOperandInDropdown &&
     [
-      ViewFilterOperand.Is,
-      ViewFilterOperand.IsNotNull,
-      ViewFilterOperand.IsNot,
-      ViewFilterOperand.LessThanOrEqual,
-      ViewFilterOperand.GreaterThanOrEqual,
-      ViewFilterOperand.IsBefore,
-      ViewFilterOperand.IsAfter,
-      ViewFilterOperand.Contains,
-      ViewFilterOperand.DoesNotContain,
-      ViewFilterOperand.IsRelative,
+      ViewFilterOperand.IS,
+      ViewFilterOperand.IS_NOT_NULL,
+      ViewFilterOperand.IS_NOT,
+      ViewFilterOperand.LESS_THAN_OR_EQUAL,
+      ViewFilterOperand.GREATER_THAN_OR_EQUAL,
+      ViewFilterOperand.IS_BEFORE,
+      ViewFilterOperand.IS_AFTER,
+      ViewFilterOperand.CONTAINS,
+      ViewFilterOperand.DOES_NOT_CONTAIN,
+      ViewFilterOperand.IS_RELATIVE,
     ].includes(selectedOperandInDropdown);
 
   const isVectorSearchFilter =
-    selectedOperandInDropdown === ViewFilterOperand.VectorSearch;
+    selectedOperandInDropdown === ViewFilterOperand.VECTOR_SEARCH;
 
   if (isVectorSearchFilter && isDefined(filterDropdownId)) {
     return <ObjectFilterDropdownVectorSearchInput />;
@@ -70,7 +69,6 @@ export const ObjectFilterDropdownFilterInput = ({
     fieldMetadataItemUsedInDropdown.type,
   );
 
-  const isDateFilter = DATE_FILTER_TYPES.includes(filterType);
   const isOnlyOperand = !isOperandWithFilterValue;
 
   if (isOnlyOperand) {
@@ -79,12 +77,20 @@ export const ObjectFilterDropdownFilterInput = ({
         <ObjectFilterDropdownInnerSelectOperandDropdown />
       </>
     );
-  } else if (isDateFilter) {
+  } else if (filterType === 'DATE') {
     return (
       <>
         <ObjectFilterDropdownInnerSelectOperandDropdown />
         <DropdownMenuSeparator />
-        <ObjectFilterDropdownDateInput />
+        <ObjectFilterDropdownDateInput instanceId={filterDropdownId} />
+      </>
+    );
+  } else if (filterType === 'DATE_TIME') {
+    return (
+      <>
+        <ObjectFilterDropdownInnerSelectOperandDropdown />
+        <DropdownMenuSeparator />
+        <ObjectFilterDropdownDateTimeInput instanceId={filterDropdownId} />
       </>
     );
   } else {

@@ -3,20 +3,20 @@ import { CoreObjectNameSingular } from '@/object-metadata/types/CoreObjectNameSi
 import { getLinkToShowPage } from '@/object-metadata/utils/getLinkToShowPage';
 import { useRecordChipData } from '@/object-record/hooks/useRecordChipData';
 import { recordIndexOpenRecordInState } from '@/object-record/record-index/states/recordIndexOpenRecordInState';
-import { ObjectRecord } from '@/object-record/types/ObjectRecord';
+import { type ObjectRecord } from '@/object-record/types/ObjectRecord';
 import { canOpenObjectInSidePanel } from '@/object-record/utils/canOpenObjectInSidePanel';
 import { ViewOpenRecordInType } from '@/views/types/ViewOpenRecordInType';
-import { MouseEvent } from 'react';
+import { type MouseEvent } from 'react';
 import { useRecoilValue } from 'recoil';
 import { isDefined } from 'twenty-shared/utils';
 import {
-  Chip,
   AvatarChip,
-  ChipSize,
+  Chip,
+  type ChipSize,
   ChipVariant,
   LinkChip,
 } from 'twenty-ui/components';
-import { TriggerEventType } from 'twenty-ui/utilities';
+import { type TriggerEventType } from 'twenty-ui/utilities';
 
 export type RecordChipProps = {
   objectNameSingular: string;
@@ -28,6 +28,7 @@ export type RecordChipProps = {
   to?: string | undefined;
   size?: ChipSize;
   isLabelHidden?: boolean;
+  isIconHidden?: boolean;
   triggerEvent?: TriggerEventType;
   onClick?: (event: MouseEvent) => void;
 };
@@ -42,6 +43,7 @@ export const RecordChip = ({
   size,
   forceDisableClick = false,
   isLabelHidden = false,
+  isIconHidden = false,
   triggerEvent = 'MOUSE_DOWN',
   onClick,
 }: RecordChipProps) => {
@@ -72,15 +74,6 @@ export const RecordChip = ({
 
   // TODO temporary until we create a record show page for Workspaces members
 
-  const avatarChip = (
-    <AvatarChip
-      placeholder={recordChipData.name}
-      placeholderColorSeed={record.id}
-      avatarType={recordChipData.avatarType}
-      avatarUrl={recordChipData.avatarUrl ?? ''}
-    />
-  );
-
   if (
     forceDisableClick ||
     objectNameSingular === CoreObjectNameSingular.WorkspaceMember
@@ -92,7 +85,16 @@ export const RecordChip = ({
         maxWidth={maxWidth}
         className={className}
         variant={ChipVariant.Transparent}
-        leftComponent={avatarChip}
+        leftComponent={
+          isIconHidden ? null : (
+            <AvatarChip
+              placeholder={recordChipData.name}
+              placeholderColorSeed={record.id}
+              avatarType={recordChipData.avatarType}
+              avatarUrl={recordChipData.avatarUrl ?? ''}
+            />
+          )
+        }
       />
     );
   }
@@ -103,7 +105,16 @@ export const RecordChip = ({
       maxWidth={maxWidth}
       label={recordChipData.name}
       isLabelHidden={isLabelHidden}
-      leftComponent={avatarChip}
+      leftComponent={
+        isIconHidden ? null : (
+          <AvatarChip
+            placeholder={recordChipData.name}
+            placeholderColorSeed={record.id}
+            avatarType={recordChipData.avatarType}
+            avatarUrl={recordChipData.avatarUrl ?? ''}
+          />
+        )
+      }
       className={className}
       variant={
         variant ??

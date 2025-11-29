@@ -1,8 +1,8 @@
 import { WorkflowStepFilterDecorator } from '@/workflow/workflow-steps/workflow-actions/filter-action/components/decorators/WorkflowStepFilterDecorator';
-import { Meta, StoryObj } from '@storybook/react';
+import { type Meta, type StoryObj } from '@storybook/react';
 import {
-  StepFilter,
-  StepFilterGroup,
+  type StepFilter,
+  type StepFilterGroup,
   StepLogicalOperator,
   ViewFilterOperand,
 } from 'twenty-shared/types';
@@ -24,11 +24,9 @@ const TEXT_STEP_FILTER: StepFilter = {
   id: 'filter-1',
   stepFilterGroupId: 'filter-group-1',
   stepOutputKey: 'company.name',
-  displayValue: 'Company Name',
   type: 'text',
-  label: 'Company Name',
   value: 'Acme',
-  operand: ViewFilterOperand.Contains,
+  operand: ViewFilterOperand.CONTAINS,
 };
 
 const meta: Meta<typeof WorkflowStepFilterColumn> = {

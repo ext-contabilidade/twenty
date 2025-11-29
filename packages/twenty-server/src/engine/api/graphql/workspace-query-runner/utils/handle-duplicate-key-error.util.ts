@@ -1,51 +1,27 @@
-import { isDefined } from 'twenty-shared/utils';
-import { QueryFailedError } from 'typeorm';
+import { msg } from '@lingui/core/macro';
+import { type QueryFailedError } from 'typeorm';
 
-import { WorkspaceQueryRunnerOptions } from 'src/engine/api/graphql/workspace-query-runner/interfaces/query-runner-option.interface';
+import { type FlatObjectMetadata } from 'src/engine/metadata-modules/flat-object-metadata/types/flat-object-metadata.type';
+import {
+  TwentyORMException,
+  TwentyORMExceptionCode,
+} from 'src/engine/twenty-orm/exceptions/twenty-orm.exception';
 
-import { UserInputError } from 'src/engine/core-modules/graphql/utils/graphql-errors.util';
+interface PostgreSQLError extends QueryFailedError {
+  detail?: string;
+}
 
 export const handleDuplicateKeyError = (
-  error: QueryFailedError,
-  context: WorkspaceQueryRunnerOptions,
+  _error: PostgreSQLError,
+  _objectMetadata: FlatObjectMetadata,
 ) => {
-  const indexNameMatch = error.message.match(/"([^"]+)"/);
-
-  if (indexNameMatch) {
-    const indexName = indexNameMatch[1];
-
-    const deletedAtFieldMetadataId =
-      context.objectMetadataItemWithFieldMaps.fieldIdByName['deletedAt'];
-
-    const affectedColumns =
-      context.objectMetadataItemWithFieldMaps.indexMetadatas
-        .find((index) => index.name === indexName)
-        ?.indexFieldMetadatas?.filter(
-          (field) => field.fieldMetadataId !== deletedAtFieldMetadataId,
-        )
-        .map((indexField) => {
-          const fieldMetadata =
-            context.objectMetadataItemWithFieldMaps.fieldsById[
-              indexField.fieldMetadataId
-            ];
-
-          return fieldMetadata?.label;
-        });
-
-    if (!isDefined(affectedColumns)) {
-      throw new UserInputError(`A duplicate entry was detected`);
-    }
-
-    const columnNames = affectedColumns.join(', ');
-
-    if (affectedColumns?.length === 1) {
-      throw new UserInputError(
-        `Duplicate ${columnNames}. Please set a unique one.`,
-      );
-    }
-
-    throw new UserInputError(
-      `A duplicate entry was detected. The combination of ${columnNames} must be unique.`,
-    );
-  }
+  // Since we no longer have indexMetadatas in FlatObjectMetadata,
+  // we provide a generic error message
+  throw new TwentyORMException(
+    `A duplicate entry was detected`,
+    TwentyORMExceptionCode.DUPLICATE_ENTRY_DETECTED,
+    {
+      userFriendlyMessage: msg`This record already exists. Please check your data and try again.`,
+    },
+  );
 };

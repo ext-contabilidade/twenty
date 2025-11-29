@@ -5,30 +5,33 @@ import { useParams } from 'react-router-dom';
 import { useRecoilCallback, useRecoilValue } from 'recoil';
 
 import { SettingsPageContainer } from '@/settings/components/SettingsPageContainer';
+import { SettingsSkeletonLoader } from '@/settings/components/SettingsSkeletonLoader';
 import { ApiKeyInput } from '@/settings/developers/components/ApiKeyInput';
 import { ApiKeyNameInput } from '@/settings/developers/components/ApiKeyNameInput';
+import { SettingsDevelopersRoleSelector } from '@/settings/developers/components/SettingsDevelopersRoleSelector';
 import { apiKeyTokenFamilyState } from '@/settings/developers/states/apiKeyTokenFamilyState';
 import { computeNewExpirationDate } from '@/settings/developers/utils/computeNewExpirationDate';
 import { formatExpiration } from '@/settings/developers/utils/formatExpiration';
-import { SettingsPath } from '@/types/SettingsPath';
 import { useSnackBar } from '@/ui/feedback/snack-bar-manager/hooks/useSnackBar';
-import { TextInput } from '@/ui/input/components/TextInput';
+import { SettingsTextInput } from '@/ui/input/components/SettingsTextInput';
 import { ConfirmationModal } from '@/ui/layout/modal/components/ConfirmationModal';
 import { useModal } from '@/ui/layout/modal/hooks/useModal';
 import { SubMenuTopBarContainer } from '@/ui/layout/page/components/SubMenuTopBarContainer';
 import { Trans, useLingui } from '@lingui/react/macro';
-import { isDefined } from 'twenty-shared/utils';
+import { SettingsPath } from 'twenty-shared/types';
+import { getSettingsPath, isDefined } from 'twenty-shared/utils';
 import { H2Title, IconRepeat, IconTrash } from 'twenty-ui/display';
 import { Button } from 'twenty-ui/input';
 import { Section } from 'twenty-ui/layout';
 import {
+  useAssignRoleToApiKeyMutation,
   useCreateApiKeyMutation,
   useGenerateApiKeyTokenMutation,
   useGetApiKeyQuery,
+  useGetRolesQuery,
   useRevokeApiKeyMutation,
 } from '~/generated-metadata/graphql';
 import { useNavigateSettings } from '~/hooks/useNavigateSettings';
-import { getSettingsPath } from '~/utils/navigation/getSettingsPath';
 
 const StyledInfo = styled.span`
   color: ${({ theme }) => theme.font.color.light};
@@ -49,7 +52,7 @@ const REGENERATE_API_KEY_MODAL_ID = 'regenerate-api-key-modal';
 
 export const SettingsDevelopersApiKeyDetail = () => {
   const { t } = useLingui();
-  const { enqueueErrorSnackBar } = useSnackBar();
+  const { enqueueErrorSnackBar, enqueueSuccessSnackBar } = useSnackBar();
   const { openModal } = useModal();
   const [isLoading, setIsLoading] = useState(false);
 
@@ -69,7 +72,9 @@ export const SettingsDevelopersApiKeyDetail = () => {
   const [generateOneApiKeyToken] = useGenerateApiKeyTokenMutation();
   const [createApiKey] = useCreateApiKeyMutation();
   const [revokeApiKey] = useRevokeApiKeyMutation();
-  const { data: apiKeyData } = useGetApiKeyQuery({
+  const [assignRoleToApiKey] = useAssignRoleToApiKeyMutation();
+
+  const { data: apiKeyData, loading: apiKeyLoading } = useGetApiKeyQuery({
     variables: {
       input: {
         id: apiKeyId,
@@ -78,12 +83,46 @@ export const SettingsDevelopersApiKeyDetail = () => {
     onCompleted: (data) => {
       if (isDefined(data?.apiKey)) {
         setApiKeyName(data.apiKey.name);
+        if (isDefined(data.apiKey.role)) {
+          setSelectedRoleId(data.apiKey.role.id);
+        }
       }
     },
   });
 
+  const { data: rolesData, loading: rolesLoading } = useGetRolesQuery();
+
+  const roles = rolesData?.getRoles ?? [];
+
   const apiKey = apiKeyData?.apiKey;
   const [apiKeyName, setApiKeyName] = useState('');
+  const [selectedRoleId, setSelectedRoleId] = useState<string | undefined>(
+    undefined,
+  );
+
+  const handleRoleChange = async (roleId: string) => {
+    if (!apiKey?.id || !isNonEmptyString(roleId)) return;
+
+    setIsLoading(true);
+    try {
+      await assignRoleToApiKey({
+        variables: {
+          apiKeyId: apiKey.id,
+          roleId,
+        },
+      });
+      enqueueSuccessSnackBar({
+        message: t`Role updated successfully`,
+      });
+      setSelectedRoleId(roleId);
+    } catch {
+      enqueueErrorSnackBar({
+        message: t`Error updating role`,
+      });
+    } finally {
+      setIsLoading(false);
+    }
+  };
 
   const deleteIntegration = async (redirect = true) => {
     setIsLoading(true);
@@ -97,9 +136,9 @@ export const SettingsDevelopersApiKeyDetail = () => {
         },
       });
       if (redirect) {
-        navigate(SettingsPath.APIs);
+        navigate(SettingsPath.ApiWebhooks);
       }
-    } catch (err) {
+    } catch {
       enqueueErrorSnackBar({ message: t`Error deleting api key.` });
     } finally {
       setIsLoading(false);
@@ -110,11 +149,25 @@ export const SettingsDevelopersApiKeyDetail = () => {
     name: string,
     newExpiresAt: string | null,
   ) => {
+    const roleIdToUse = selectedRoleId;
+
+    if (!roleIdToUse) {
+      enqueueErrorSnackBar({
+        message: t`A role must be selected for the API key`,
+      });
+      return;
+    }
+
+    if (!isDefined(roleIdToUse)) {
+      throw new Error('Role not selected - this should never happen');
+    }
+
     const { data: newApiKeyData } = await createApiKey({
       variables: {
         input: {
           name: name,
           expiresAt: newExpiresAt ?? '',
+          roleId: roleIdToUse,
         },
       },
     });
@@ -155,7 +208,7 @@ export const SettingsDevelopersApiKeyDetail = () => {
           });
         }
       }
-    } catch (err) {
+    } catch {
       enqueueErrorSnackBar({
         message: t`Error regenerating api key.`,
       });
@@ -165,6 +218,10 @@ export const SettingsDevelopersApiKeyDetail = () => {
   };
 
   const confirmationValue = t`yes`;
+
+  if (apiKeyLoading || rolesLoading) {
+    return <SettingsSkeletonLoader />;
+  }
 
   return (
     <>
@@ -177,10 +234,10 @@ export const SettingsDevelopersApiKeyDetail = () => {
               href: getSettingsPath(SettingsPath.Workspace),
             },
             {
-              children: t`APIs`,
-              href: getSettingsPath(SettingsPath.APIs),
+              children: t`APIs & Webhooks`,
+              href: getSettingsPath(SettingsPath.ApiWebhooks),
             },
-            { children: t`${apiKeyName}` },
+            { children: apiKey?.name },
           ]}
         >
           <SettingsPageContainer>
@@ -223,10 +280,21 @@ export const SettingsDevelopersApiKeyDetail = () => {
             </Section>
             <Section>
               <H2Title
+                title={t`Role`}
+                description={t`What this API can do: Select a user role to define its permissions.`}
+              />
+              <SettingsDevelopersRoleSelector
+                value={selectedRoleId}
+                onChange={handleRoleChange}
+                roles={roles}
+              />
+            </Section>
+            <Section>
+              <H2Title
                 title={t`Expiration`}
                 description={t`When the key will be disabled`}
               />
-              <TextInput
+              <SettingsTextInput
                 instanceId={`api-key-expiration-${apiKey?.id}`}
                 placeholder={t`E.g. backoffice integration`}
                 value={formatExpiration(apiKey?.expiresAt || '', true, false)}

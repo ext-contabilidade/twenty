@@ -1,18 +1,20 @@
 import { InjectRepository } from '@nestjs/typeorm';
 
+import { assertIsDefinedOrThrow } from 'twenty-shared/utils';
 import { Repository } from 'typeorm';
 
-import { WorkspacePreQueryHookInstance } from 'src/engine/api/graphql/workspace-query-runner/workspace-query-hook/interfaces/workspace-query-hook.interface';
-import { DeleteOneResolverArgs } from 'src/engine/api/graphql/workspace-resolver-builder/interfaces/workspace-resolvers-builder.interface';
+import { type WorkspacePreQueryHookInstance } from 'src/engine/api/graphql/workspace-query-runner/workspace-query-hook/interfaces/workspace-query-hook.interface';
+import { type DeleteOneResolverArgs } from 'src/engine/api/graphql/workspace-resolver-builder/interfaces/workspace-resolvers-builder.interface';
 
 import { DatabaseEventAction } from 'src/engine/api/graphql/graphql-query-runner/enums/database-event-action';
 import { WorkspaceQueryHook } from 'src/engine/api/graphql/workspace-query-runner/workspace-query-hook/decorators/workspace-query-hook.decorator';
-import { AuthContext } from 'src/engine/core-modules/auth/types/auth-context.type';
-import { workspaceValidator } from 'src/engine/core-modules/workspace/workspace.validate';
+import { type AuthContext } from 'src/engine/core-modules/auth/types/auth-context.type';
+import { WorkspaceNotFoundDefaultError } from 'src/engine/core-modules/workspace/workspace.exception';
+import { fromObjectMetadataEntityToFlatObjectMetadata } from 'src/engine/metadata-modules/flat-object-metadata/utils/from-object-metadata-entity-to-flat-object-metadata.util';
 import { ObjectMetadataEntity } from 'src/engine/metadata-modules/object-metadata/object-metadata.entity';
 import { TwentyORMManager } from 'src/engine/twenty-orm/twenty-orm.manager';
 import { WorkspaceEventEmitter } from 'src/engine/workspace-event-emitter/workspace-event-emitter';
-import { MessageChannelWorkspaceEntity } from 'src/modules/messaging/common/standard-objects/message-channel.workspace-entity';
+import { type MessageChannelWorkspaceEntity } from 'src/modules/messaging/common/standard-objects/message-channel.workspace-entity';
 
 @WorkspaceQueryHook(`connectedAccount.destroyOne`)
 export class ConnectedAccountDeleteOnePreQueryHook
@@ -21,20 +23,20 @@ export class ConnectedAccountDeleteOnePreQueryHook
   constructor(
     private readonly twentyORMManager: TwentyORMManager,
     private readonly workspaceEventEmitter: WorkspaceEventEmitter,
-    @InjectRepository(ObjectMetadataEntity, 'core')
+    @InjectRepository(ObjectMetadataEntity)
     private readonly objectMetadataRepository: Repository<ObjectMetadataEntity>,
   ) {}
 
   async execute(
     authContext: AuthContext,
-    objectName: string,
+    _objectName: string,
     payload: DeleteOneResolverArgs,
   ): Promise<DeleteOneResolverArgs> {
     const connectedAccountId = payload.id;
 
     const workspace = authContext.workspace;
 
-    workspaceValidator.assertIsDefinedOrThrow(workspace);
+    assertIsDefinedOrThrow(workspace, WorkspaceNotFoundDefaultError);
 
     const messageChannelRepository =
       await this.twentyORMManager.getRepository<MessageChannelWorkspaceEntity>(
@@ -45,20 +47,25 @@ export class ConnectedAccountDeleteOnePreQueryHook
       connectedAccountId,
     });
 
-    const objectMetadata = await this.objectMetadataRepository.findOneOrFail({
-      where: {
-        nameSingular: 'messageChannel',
-        workspaceId: workspace.id,
-      },
-    });
+    const objectMetadataEntity =
+      await this.objectMetadataRepository.findOneOrFail({
+        where: {
+          nameSingular: 'messageChannel',
+          workspaceId: workspace.id,
+        },
+        relations: ['fields', 'indexMetadatas', 'views'],
+      });
+
+    const flatObjectMetadata =
+      fromObjectMetadataEntityToFlatObjectMetadata(objectMetadataEntity);
 
     // TODO: handle cascade events for delete
     this.workspaceEventEmitter.emitDatabaseBatchEvent({
       objectMetadataNameSingular: 'messageChannel',
       action: DatabaseEventAction.DESTROYED,
+      objectMetadata: flatObjectMetadata,
       events: messageChannels.map((messageChannel) => ({
         recordId: messageChannel.id,
-        objectMetadata,
         properties: {
           before: messageChannel,
         },

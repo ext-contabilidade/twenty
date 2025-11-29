@@ -1,38 +1,42 @@
+import { Injectable } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 
-import { t } from '@lingui/core/macro';
+import { msg } from '@lingui/core/macro';
 import { isDefined } from 'twenty-shared/utils';
 import { Repository } from 'typeorm';
 
-import { Workspace } from 'src/engine/core-modules/workspace/workspace.entity';
-import { ADMIN_ROLE_LABEL } from 'src/engine/metadata-modules/permissions/constants/admin-role-label.constants';
+import { WorkspaceEntity } from 'src/engine/core-modules/workspace/workspace.entity';
+import { WorkspaceManyOrAllFlatEntityMapsCacheService } from 'src/engine/metadata-modules/flat-entity/services/workspace-many-or-all-flat-entity-maps-cache.service';
+import { computeFlatEntityMapsFromTo } from 'src/engine/metadata-modules/flat-entity/utils/compute-flat-entity-maps-from-to.util';
+import { findFlatEntityByIdInFlatEntityMapsOrThrow } from 'src/engine/metadata-modules/flat-entity/utils/find-flat-entity-by-id-in-flat-entity-maps-or-throw.util';
+import { fromCreateRoleInputToFlatRoleToCreate } from 'src/engine/metadata-modules/flat-role/utils/from-create-role-input-to-flat-role-to-create.util';
+import { fromDeleteRoleInputToFlatRoleOrThrow } from 'src/engine/metadata-modules/flat-role/utils/from-delete-role-input-to-flat-role-or-throw.util';
+import { fromUpdateRoleInputToFlatRoleToUpdateOrThrow } from 'src/engine/metadata-modules/flat-role/utils/from-update-role-input-to-flat-role-to-update-or-throw.util';
 import { MEMBER_ROLE_LABEL } from 'src/engine/metadata-modules/permissions/constants/member-role-label.constants';
 import {
   PermissionsException,
   PermissionsExceptionCode,
   PermissionsExceptionMessage,
 } from 'src/engine/metadata-modules/permissions/permissions.exception';
-import { CreateRoleInput } from 'src/engine/metadata-modules/role/dtos/create-role-input.dto';
-import {
-  UpdateRoleInput,
-  UpdateRolePayload,
-} from 'src/engine/metadata-modules/role/dtos/update-role-input.dto';
-import { RoleTargetsEntity } from 'src/engine/metadata-modules/role/role-targets.entity';
+import { type CreateRoleInput } from 'src/engine/metadata-modules/role/dtos/create-role-input.dto';
+import { RoleDTO } from 'src/engine/metadata-modules/role/dtos/role.dto';
+import { type UpdateRoleInput } from 'src/engine/metadata-modules/role/dtos/update-role-input.dto';
 import { RoleEntity } from 'src/engine/metadata-modules/role/role.entity';
+import { fromFlatRoleToRoleDto } from 'src/engine/metadata-modules/role/utils/fromFlatRoleToRoleDto.util';
 import { UserRoleService } from 'src/engine/metadata-modules/user-role/user-role.service';
-import { isArgDefinedIfProvidedOrThrow } from 'src/engine/metadata-modules/utils/is-arg-defined-if-provided-or-throw.util';
-import { WorkspacePermissionsCacheService } from 'src/engine/metadata-modules/workspace-permissions-cache/workspace-permissions-cache.service';
+import { WorkspaceMigrationBuilderExceptionV2 } from 'src/engine/workspace-manager/workspace-migration-v2/exceptions/workspace-migration-builder-exception-v2';
+import { WorkspaceMigrationValidateBuildAndRunService } from 'src/engine/workspace-manager/workspace-migration-v2/services/workspace-migration-validate-build-and-run-service';
 
+@Injectable()
 export class RoleService {
   constructor(
-    @InjectRepository(Workspace, 'core')
-    private readonly workspaceRepository: Repository<Workspace>,
-    @InjectRepository(RoleEntity, 'core')
+    private readonly workspaceMigrationValidateBuildAndRunService: WorkspaceMigrationValidateBuildAndRunService,
+    private readonly flatEntityMapsCacheService: WorkspaceManyOrAllFlatEntityMapsCacheService,
+    @InjectRepository(WorkspaceEntity)
+    private readonly workspaceRepository: Repository<WorkspaceEntity>,
+    @InjectRepository(RoleEntity)
     private readonly roleRepository: Repository<RoleEntity>,
-    @InjectRepository(RoleTargetsEntity, 'core')
-    private readonly roleTargetsRepository: Repository<RoleTargetsEntity>,
     private readonly userRoleService: UserRoleService,
-    private readonly workspacePermissionsCacheService: WorkspacePermissionsCacheService,
   ) {}
 
   public async getWorkspaceRoles(workspaceId: string): Promise<RoleEntity[]> {
@@ -40,7 +44,12 @@ export class RoleService {
       where: {
         workspaceId,
       },
-      relations: ['roleTargets', 'settingPermissions', 'objectPermissions'],
+      relations: {
+        roleTargets: true,
+        permissionFlags: true,
+        objectPermissions: true,
+        fieldPermissions: true,
+      },
     });
   }
 
@@ -53,39 +62,78 @@ export class RoleService {
         id,
         workspaceId,
       },
-      relations: ['roleTargets', 'settingPermissions'],
+      relations: {
+        roleTargets: true,
+        permissionFlags: true,
+        objectPermissions: true,
+        fieldPermissions: true,
+      },
     });
   }
 
   public async createRole({
     input,
     workspaceId,
+    applicationId,
   }: {
     input: CreateRoleInput;
     workspaceId: string;
-  }): Promise<RoleEntity> {
-    await this.validateRoleInputOrThrow({ input, workspaceId });
+    applicationId: string;
+  }): Promise<RoleDTO> {
+    const { flatRoleMaps: existingFlatRoleMaps } =
+      await this.flatEntityMapsCacheService.getOrRecomputeManyOrAllFlatEntityMaps(
+        {
+          workspaceId,
+          flatMapsKeys: ['flatRoleMaps'],
+        },
+      );
 
-    const role = await this.roleRepository.save({
-      id: input.id,
-      label: input.label,
-      description: input.description,
-      icon: input.icon,
-      canUpdateAllSettings: input.canUpdateAllSettings,
-      canReadAllObjectRecords: input.canReadAllObjectRecords,
-      canUpdateAllObjectRecords: input.canUpdateAllObjectRecords,
-      canSoftDeleteAllObjectRecords: input.canSoftDeleteAllObjectRecords,
-      canDestroyAllObjectRecords: input.canDestroyAllObjectRecords,
-      isEditable: true,
+    const flatRoleToCreate = fromCreateRoleInputToFlatRoleToCreate({
+      createRoleInput: input,
       workspaceId,
+      applicationId,
     });
 
-    await this.workspacePermissionsCacheService.recomputeRolesPermissionsCache({
-      workspaceId,
-      roleIds: [role.id],
-    });
+    const validateAndBuildResult =
+      await this.workspaceMigrationValidateBuildAndRunService.validateBuildAndRunWorkspaceMigration(
+        {
+          fromToAllFlatEntityMaps: {
+            flatRoleMaps: computeFlatEntityMapsFromTo({
+              flatEntityMaps: existingFlatRoleMaps,
+              flatEntityToCreate: [flatRoleToCreate],
+              flatEntityToDelete: [],
+              flatEntityToUpdate: [],
+            }),
+          },
+          dependencyAllFlatEntityMaps: {},
+          buildOptions: {
+            isSystemBuild: false,
+          },
+          workspaceId,
+        },
+      );
 
-    return role;
+    if (isDefined(validateAndBuildResult)) {
+      throw new WorkspaceMigrationBuilderExceptionV2(
+        validateAndBuildResult,
+        'Multiple validation errors occurred while creating role',
+      );
+    }
+
+    const { flatRoleMaps: recomputedFlatRoleMaps } =
+      await this.flatEntityMapsCacheService.getOrRecomputeManyOrAllFlatEntityMaps(
+        {
+          workspaceId,
+          flatMapsKeys: ['flatRoleMaps'],
+        },
+      );
+
+    return fromFlatRoleToRoleDto(
+      findFlatEntityByIdInFlatEntityMapsOrThrow({
+        flatEntityId: flatRoleToCreate.id,
+        flatEntityMaps: recomputedFlatRoleMaps,
+      }),
+    );
   }
 
   public async updateRole({
@@ -94,92 +142,96 @@ export class RoleService {
   }: {
     input: UpdateRoleInput;
     workspaceId: string;
-  }): Promise<RoleEntity> {
-    await this.validateRoleIsEditableOrThrow({
-      roleId: input.id,
-      workspaceId,
+  }): Promise<RoleDTO> {
+    const { flatRoleMaps: existingFlatRoleMaps } =
+      await this.flatEntityMapsCacheService.getOrRecomputeManyOrAllFlatEntityMaps(
+        {
+          workspaceId,
+          flatMapsKeys: ['flatRoleMaps'],
+        },
+      );
+
+    const flatRoleToUpdate = fromUpdateRoleInputToFlatRoleToUpdateOrThrow({
+      flatRoleMaps: existingFlatRoleMaps,
+      updateRoleInput: input,
     });
 
-    const existingRole = await this.roleRepository.findOne({
-      where: {
-        id: input.id,
-        workspaceId,
-      },
-    });
+    const validateAndBuildResult =
+      await this.workspaceMigrationValidateBuildAndRunService.validateBuildAndRunWorkspaceMigration(
+        {
+          fromToAllFlatEntityMaps: {
+            flatRoleMaps: computeFlatEntityMapsFromTo({
+              flatEntityMaps: existingFlatRoleMaps,
+              flatEntityToCreate: [],
+              flatEntityToDelete: [],
+              flatEntityToUpdate: [flatRoleToUpdate],
+            }),
+          },
+          dependencyAllFlatEntityMaps: {},
+          buildOptions: {
+            isSystemBuild: false,
+          },
+          workspaceId,
+        },
+      );
 
-    if (!isDefined(existingRole)) {
-      throw new PermissionsException(
-        PermissionsExceptionMessage.ROLE_NOT_FOUND,
-        PermissionsExceptionCode.ROLE_NOT_FOUND,
+    if (isDefined(validateAndBuildResult)) {
+      throw new WorkspaceMigrationBuilderExceptionV2(
+        validateAndBuildResult,
+        'Multiple validation errors occurred while updating role',
       );
     }
 
-    await this.validateRoleInputOrThrow({
-      input: input.update,
-      workspaceId,
-      roleId: input.id,
-    });
+    const { flatRoleMaps: recomputedFlatRoleMaps } =
+      await this.flatEntityMapsCacheService.getOrRecomputeManyOrAllFlatEntityMaps(
+        {
+          workspaceId,
+          flatMapsKeys: ['flatRoleMaps'],
+        },
+      );
 
-    const updatedRole = await this.roleRepository.save({
-      id: input.id,
-      ...input.update,
-    });
-
-    await this.workspacePermissionsCacheService.recomputeRolesPermissionsCache({
-      workspaceId,
-      roleIds: [input.id],
-    });
-
-    return { ...existingRole, ...updatedRole };
+    return fromFlatRoleToRoleDto(
+      findFlatEntityByIdInFlatEntityMapsOrThrow({
+        flatEntityId: input.id,
+        flatEntityMaps: recomputedFlatRoleMaps,
+      }),
+    );
   }
 
-  public async createAdminRole({
+  public async deleteRole({
+    roleId,
     workspaceId,
   }: {
+    roleId: string;
     workspaceId: string;
-  }): Promise<RoleEntity> {
-    return this.roleRepository.save({
-      label: ADMIN_ROLE_LABEL,
-      description: 'Admin role',
-      icon: 'IconUserCog',
-      canUpdateAllSettings: true,
-      canReadAllObjectRecords: true,
-      canUpdateAllObjectRecords: true,
-      canSoftDeleteAllObjectRecords: true,
-      canDestroyAllObjectRecords: true,
-      isEditable: false,
-      workspaceId,
-    });
-  }
-
-  public async deleteRole(
-    roleId: string,
-    workspaceId: string,
-  ): Promise<string> {
-    await this.validateRoleIsEditableOrThrow({
-      roleId,
-      workspaceId,
-    });
-
-    const defaultRole = await this.workspaceRepository.findOne({
+  }): Promise<RoleDTO> {
+    const workspace = await this.workspaceRepository.findOne({
       where: {
         id: workspaceId,
       },
     });
 
-    const defaultRoleId = defaultRole?.defaultRoleId;
+    const defaultRoleId = workspace?.defaultRoleId;
 
     if (!isDefined(defaultRoleId)) {
       throw new PermissionsException(
         PermissionsExceptionMessage.DEFAULT_ROLE_NOT_FOUND,
         PermissionsExceptionCode.DEFAULT_ROLE_NOT_FOUND,
+        {
+          userFriendlyMessage: msg`The default role for this workspace could not be found. Please contact support for assistance.`,
+        },
       );
     }
 
-    await this.validateRoleIsNotDefaultRoleOrThrow({
-      roleId,
-      defaultRoleId,
-    });
+    if (defaultRoleId === roleId) {
+      throw new PermissionsException(
+        PermissionsExceptionMessage.DEFAULT_ROLE_CANNOT_BE_DELETED,
+        PermissionsExceptionCode.DEFAULT_ROLE_CANNOT_BE_DELETED,
+        {
+          userFriendlyMessage: msg`The default role cannot be deleted as it is required for the workspace to function properly.`,
+        },
+      );
+    }
 
     await this.assignDefaultRoleToMembersWithRoleToDelete({
       roleId,
@@ -187,154 +239,106 @@ export class RoleService {
       defaultRoleId,
     });
 
-    await this.roleRepository.delete({
-      id: roleId,
-      workspaceId,
+    const { flatRoleMaps: existingFlatRoleMaps } =
+      await this.flatEntityMapsCacheService.getOrRecomputeManyOrAllFlatEntityMaps(
+        {
+          workspaceId,
+          flatMapsKeys: ['flatRoleMaps'],
+        },
+      );
+
+    const flatRoleToDelete = fromDeleteRoleInputToFlatRoleOrThrow({
+      flatRoleMaps: existingFlatRoleMaps,
+      roleId,
     });
 
-    await this.workspacePermissionsCacheService.recomputeRolesPermissionsCache({
-      workspaceId,
-    });
+    const validateAndBuildResult =
+      await this.workspaceMigrationValidateBuildAndRunService.validateBuildAndRunWorkspaceMigration(
+        {
+          fromToAllFlatEntityMaps: {
+            flatRoleMaps: computeFlatEntityMapsFromTo({
+              flatEntityMaps: existingFlatRoleMaps,
+              flatEntityToCreate: [],
+              flatEntityToDelete: [flatRoleToDelete],
+              flatEntityToUpdate: [],
+            }),
+          },
+          dependencyAllFlatEntityMaps: {},
+          buildOptions: {
+            inferDeletionFromMissingEntities: {
+              role: true,
+            },
+            isSystemBuild: false,
+          },
+          workspaceId,
+        },
+      );
 
-    return roleId;
+    if (isDefined(validateAndBuildResult)) {
+      throw new WorkspaceMigrationBuilderExceptionV2(
+        validateAndBuildResult,
+        'Multiple validation errors occurred while deleting role',
+      );
+    }
+
+    return fromFlatRoleToRoleDto(flatRoleToDelete);
   }
 
   public async createMemberRole({
     workspaceId,
+    applicationId,
   }: {
+    applicationId: string;
     workspaceId: string;
-  }): Promise<RoleEntity> {
-    return this.roleRepository.save({
-      label: MEMBER_ROLE_LABEL,
-      description: 'Member role',
-      icon: 'IconUser',
-      canUpdateAllSettings: false,
-      canReadAllObjectRecords: true,
-      canUpdateAllObjectRecords: true,
-      canSoftDeleteAllObjectRecords: true,
-      canDestroyAllObjectRecords: true,
-      isEditable: true,
+  }): Promise<RoleDTO> {
+    return this.createRole({
+      input: {
+        label: MEMBER_ROLE_LABEL,
+        description: 'Member role',
+        icon: 'IconUser',
+        canUpdateAllSettings: false,
+        canAccessAllTools: true,
+        canReadAllObjectRecords: true,
+        canUpdateAllObjectRecords: true,
+        canSoftDeleteAllObjectRecords: true,
+        canDestroyAllObjectRecords: true,
+        canBeAssignedToUsers: true,
+        canBeAssignedToAgents: false,
+        canBeAssignedToApiKeys: false,
+      },
+      applicationId,
       workspaceId,
     });
   }
 
-  // Only used for dev seeding and testing
   public async createGuestRole({
     workspaceId,
+    applicationId,
   }: {
     workspaceId: string;
-  }): Promise<RoleEntity> {
-    return this.roleRepository.save({
-      label: 'Guest',
-      description: 'Guest role',
-      icon: 'IconUser',
-      canUpdateAllSettings: false,
-      canReadAllObjectRecords: true,
-      canUpdateAllObjectRecords: false,
-      canSoftDeleteAllObjectRecords: false,
-      canDestroyAllObjectRecords: false,
-      isEditable: false,
+    applicationId: string;
+  }): Promise<RoleDTO> {
+    return this.createRole({
+      input: {
+        label: 'Guest',
+        description: 'Guest role',
+        icon: 'IconUser',
+        canUpdateAllSettings: false,
+        canAccessAllTools: false,
+        canReadAllObjectRecords: true,
+        canUpdateAllObjectRecords: false,
+        canSoftDeleteAllObjectRecords: false,
+        canDestroyAllObjectRecords: false,
+        canBeAssignedToUsers: true,
+        canBeAssignedToAgents: false,
+        canBeAssignedToApiKeys: false,
+      },
       workspaceId,
+      applicationId,
     });
   }
 
-  private async validateRoleInputOrThrow({
-    input,
-    workspaceId,
-    roleId,
-  }: {
-    input: CreateRoleInput | UpdateRolePayload;
-    workspaceId: string;
-    roleId?: string;
-  }): Promise<void> {
-    const keysToValidate = [
-      'label',
-      'canUpdateAllSettings',
-      'canReadAllObjectRecords',
-      'canUpdateAllObjectRecords',
-      'canSoftDeleteAllObjectRecords',
-      'canDestroyAllObjectRecords',
-    ];
-
-    for (const key of keysToValidate) {
-      try {
-        isArgDefinedIfProvidedOrThrow({
-          input,
-          key,
-          // @ts-expect-error legacy noImplicitAny
-          value: input[key],
-        });
-      } catch (error) {
-        throw new PermissionsException(
-          error.message,
-          PermissionsExceptionCode.INVALID_ARG,
-        );
-      }
-    }
-
-    const workspaceRoles = await this.getWorkspaceRoles(workspaceId);
-
-    if (isDefined(input.label)) {
-      let rolesForLabelComparison = workspaceRoles;
-
-      if (isDefined(roleId)) {
-        rolesForLabelComparison = workspaceRoles.filter(
-          (role) => role.id !== roleId,
-        );
-      }
-
-      if (rolesForLabelComparison.some((role) => role.label === input.label)) {
-        throw new PermissionsException(
-          PermissionsExceptionMessage.ROLE_LABEL_ALREADY_EXISTS,
-          PermissionsExceptionCode.ROLE_LABEL_ALREADY_EXISTS,
-          t`A role with this label already exists.`,
-        );
-      }
-    }
-
-    const existingRole = workspaceRoles.find((role) => role.id === roleId);
-
-    await this.validateRoleReadAndWirtePermissionsConsistencyOrThrow({
-      input,
-      existingRole,
-    });
-  }
-
-  private async validateRoleReadAndWirtePermissionsConsistencyOrThrow({
-    input,
-    existingRole,
-  }: {
-    input: CreateRoleInput | UpdateRolePayload;
-    existingRole?: RoleEntity;
-  }) {
-    const hasReadingPermissionsAfterUpdate =
-      input.canReadAllObjectRecords ?? existingRole?.canReadAllObjectRecords;
-
-    const hasUpdatePermissionsAfterUpdate =
-      input.canUpdateAllObjectRecords ??
-      existingRole?.canUpdateAllObjectRecords;
-
-    const hasSoftDeletePermissionsAfterUpdate =
-      input.canSoftDeleteAllObjectRecords ??
-      existingRole?.canSoftDeleteAllObjectRecords;
-
-    const hasDestroyPermissionsAfterUpdate =
-      input.canDestroyAllObjectRecords ??
-      existingRole?.canDestroyAllObjectRecords;
-
-    if (
-      hasReadingPermissionsAfterUpdate === false &&
-      (hasUpdatePermissionsAfterUpdate ||
-        hasSoftDeletePermissionsAfterUpdate ||
-        hasDestroyPermissionsAfterUpdate)
-    ) {
-      throw new PermissionsException(
-        PermissionsExceptionMessage.CANNOT_GIVE_WRITING_PERMISSION_WITHOUT_READING_PERMISSION,
-        PermissionsExceptionCode.CANNOT_GIVE_WRITING_PERMISSION_WITHOUT_READING_PERMISSION,
-      );
-    }
-  }
-
+  // TODO: Move to migration side effect / To address for rollback of role deletion
   private async assignDefaultRoleToMembersWithRoleToDelete({
     roleId,
     workspaceId,
@@ -359,49 +363,5 @@ export class RoleService {
         }),
       ),
     );
-  }
-
-  private async getRole(
-    roleId: string,
-    workspaceId: string,
-  ): Promise<RoleEntity | null> {
-    return this.roleRepository.findOne({
-      where: {
-        id: roleId,
-        workspaceId,
-      },
-    });
-  }
-
-  private async validateRoleIsEditableOrThrow({
-    roleId,
-    workspaceId,
-  }: {
-    roleId: string;
-    workspaceId: string;
-  }) {
-    const role = await this.getRole(roleId, workspaceId);
-
-    if (!role?.isEditable) {
-      throw new PermissionsException(
-        PermissionsExceptionMessage.ROLE_NOT_EDITABLE,
-        PermissionsExceptionCode.ROLE_NOT_EDITABLE,
-      );
-    }
-  }
-
-  private async validateRoleIsNotDefaultRoleOrThrow({
-    roleId,
-    defaultRoleId,
-  }: {
-    roleId: string;
-    defaultRoleId: string;
-  }): Promise<void> {
-    if (defaultRoleId === roleId) {
-      throw new PermissionsException(
-        PermissionsExceptionMessage.DEFAULT_ROLE_CANNOT_BE_DELETED,
-        PermissionsExceptionCode.DEFAULT_ROLE_CANNOT_BE_DELETED,
-      );
-    }
   }
 }

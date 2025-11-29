@@ -1,12 +1,6 @@
-import { createComponentStateV2 } from '@/ui/utilities/state/component-state/utils/createComponentStateV2';
-import { createComponentInstanceContext } from '@/ui/utilities/state/component-state/utils/createComponentInstanceContext';
+import { atom } from 'recoil';
 
-export const IsAgentChatCurrentContextActiveInstanceContext =
-  createComponentInstanceContext();
-
-export const isAgentChatCurrentContextActiveState =
-  createComponentStateV2<boolean>({
-    defaultValue: true,
-    key: 'isAgentChatCurrentContextActiveState',
-    componentInstanceContext: IsAgentChatCurrentContextActiveInstanceContext,
-  });
+export const isAgentChatCurrentContextActiveState = atom<boolean>({
+  key: 'ai/isAgentChatCurrentContextActiveState',
+  default: true,
+});

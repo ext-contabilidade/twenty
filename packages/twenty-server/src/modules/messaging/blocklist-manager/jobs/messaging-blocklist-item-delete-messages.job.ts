@@ -1,16 +1,17 @@
 import { Scope } from '@nestjs/common';
 
+import { isDefined } from 'twenty-shared/utils';
 import { And, Any, ILike, In, Not, Or } from 'typeorm';
 
-import { ObjectRecordCreateEvent } from 'src/engine/core-modules/event-emitter/types/object-record-create.event';
+import { type ObjectRecordCreateEvent } from 'src/engine/core-modules/event-emitter/types/object-record-create.event';
 import { Process } from 'src/engine/core-modules/message-queue/decorators/process.decorator';
 import { Processor } from 'src/engine/core-modules/message-queue/decorators/processor.decorator';
 import { MessageQueue } from 'src/engine/core-modules/message-queue/message-queue.constants';
 import { TwentyORMManager } from 'src/engine/twenty-orm/twenty-orm.manager';
-import { WorkspaceEventBatch } from 'src/engine/workspace-event-emitter/types/workspace-event.type';
-import { BlocklistWorkspaceEntity } from 'src/modules/blocklist/standard-objects/blocklist.workspace-entity';
-import { MessageChannelMessageAssociationWorkspaceEntity } from 'src/modules/messaging/common/standard-objects/message-channel-message-association.workspace-entity';
-import { MessageChannelWorkspaceEntity } from 'src/modules/messaging/common/standard-objects/message-channel.workspace-entity';
+import { type WorkspaceEventBatch } from 'src/engine/workspace-event-emitter/types/workspace-event-batch.type';
+import { type BlocklistWorkspaceEntity } from 'src/modules/blocklist/standard-objects/blocklist.workspace-entity';
+import { type MessageChannelMessageAssociationWorkspaceEntity } from 'src/modules/messaging/common/standard-objects/message-channel-message-association.workspace-entity';
+import { type MessageChannelWorkspaceEntity } from 'src/modules/messaging/common/standard-objects/message-channel.workspace-entity';
 import { MessagingMessageCleanerService } from 'src/modules/messaging/message-cleaner/services/messaging-message-cleaner.service';
 
 export type BlocklistItemDeleteMessagesJobData = WorkspaceEventBatch<
@@ -52,6 +53,10 @@ export class BlocklistItemDeleteMessagesJob {
 
         if (!acc.has(workspaceMemberId)) {
           acc.set(workspaceMemberId, []);
+        }
+
+        if (!isDefined(handle)) {
+          return acc;
         }
 
         acc.get(workspaceMemberId)?.push(handle);
@@ -140,6 +145,6 @@ export class BlocklistItemDeleteMessagesJob {
       }
     }
 
-    await this.threadCleanerService.cleanWorkspaceThreads(workspaceId);
+    await this.threadCleanerService.cleanOrphanMessagesAndThreads(workspaceId);
   }
 }

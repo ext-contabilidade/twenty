@@ -1,17 +1,18 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 
-import { ObjectRecordsPermissionsByRoleId } from 'twenty-shared/types';
+import { type ObjectsPermissionsByRoleId } from 'twenty-shared/types';
 import { isDefined } from 'twenty-shared/utils';
 import { EntitySchema, Repository } from 'typeorm';
 
-import { FeatureFlagMap } from 'src/engine/core-modules/feature-flag/interfaces/feature-flag-map.interface';
+import { type FeatureFlagMap } from 'src/engine/core-modules/feature-flag/interfaces/feature-flag-map.interface';
 
 import { TwentyConfigService } from 'src/engine/core-modules/twenty-config/twenty-config.service';
-import { Workspace } from 'src/engine/core-modules/workspace/workspace.entity';
+import { WorkspaceEntity } from 'src/engine/core-modules/workspace/workspace.entity';
 import { DataSourceService } from 'src/engine/metadata-modules/data-source/data-source.service';
+import { WorkspaceManyOrAllFlatEntityMapsCacheService } from 'src/engine/metadata-modules/flat-entity/services/workspace-many-or-all-flat-entity-maps-cache.service';
+import { buildObjectIdByNameMaps } from 'src/engine/metadata-modules/flat-object-metadata/utils/build-object-id-by-name-maps.util';
 import { WorkspaceFeatureFlagsMapCacheService } from 'src/engine/metadata-modules/workspace-feature-flags-map-cache/workspace-feature-flags-map-cache.service';
-import { WorkspaceMetadataCacheService } from 'src/engine/metadata-modules/workspace-metadata-cache/services/workspace-metadata-cache.service';
 import { WorkspacePermissionsCacheStorageService } from 'src/engine/metadata-modules/workspace-permissions-cache/workspace-permissions-cache-storage.service';
 import {
   ROLES_PERMISSIONS,
@@ -24,8 +25,8 @@ import {
 } from 'src/engine/twenty-orm/exceptions/twenty-orm.exception';
 import { EntitySchemaFactory } from 'src/engine/twenty-orm/factories/entity-schema.factory';
 import { PromiseMemoizer } from 'src/engine/twenty-orm/storage/promise-memoizer.storage';
-import { CacheKey } from 'src/engine/twenty-orm/storage/types/cache-key.type';
-import { getFromCacheWithRecompute } from 'src/engine/utils/get-data-from-cache-with-recompute.util';
+import { type CacheKey } from 'src/engine/twenty-orm/storage/types/cache-key.type';
+import { GetDataFromCacheWithRecomputeService } from 'src/engine/workspace-cache-storage/services/get-data-from-cache-with-recompute.service';
 import { WorkspaceCacheStorageService } from 'src/engine/workspace-cache-storage/workspace-cache-storage.service';
 import { WorkspaceEventEmitter } from 'src/engine/workspace-event-emitter/workspace-event-emitter';
 
@@ -45,37 +46,19 @@ export class WorkspaceDatasourceFactory {
     private readonly dataSourceService: DataSourceService,
     private readonly twentyConfigService: TwentyConfigService,
     private readonly workspaceCacheStorageService: WorkspaceCacheStorageService,
-    private readonly workspaceMetadataCacheService: WorkspaceMetadataCacheService,
+    private readonly workspaceManyOrAllFlatEntityMapsCacheService: WorkspaceManyOrAllFlatEntityMapsCacheService,
     private readonly entitySchemaFactory: EntitySchemaFactory,
     private readonly workspacePermissionsCacheService: WorkspacePermissionsCacheService,
     private readonly workspacePermissionsCacheStorageService: WorkspacePermissionsCacheStorageService,
     private readonly workspaceFeatureFlagsMapCacheService: WorkspaceFeatureFlagsMapCacheService,
-    @InjectRepository(Workspace, 'core')
-    private readonly workspaceRepository: Repository<Workspace>,
+    @InjectRepository(WorkspaceEntity)
+    private readonly workspaceRepository: Repository<WorkspaceEntity>,
     private readonly workspaceEventEmitter: WorkspaceEventEmitter,
+    private readonly getFromCacheWithRecomputeService: GetDataFromCacheWithRecomputeService<
+      string,
+      ObjectsPermissionsByRoleId
+    >,
   ) {}
-
-  private async conditionalDestroyDataSource(
-    dataSource: WorkspaceDataSource,
-  ): Promise<void> {
-    const isPoolSharingEnabled = this.twentyConfigService.get(
-      'PG_ENABLE_POOL_SHARING',
-    );
-
-    if (isPoolSharingEnabled) {
-      this.logger.debug(
-        `PromiseMemoizer Event: A WorkspaceDataSource (using shared pool) is being cleared. Actual pool closure managed by PgPoolSharedService. Not calling dataSource.destroy().`,
-      );
-      // We should NOT call dataSource.destroy() here, because that would end
-      // the shared pool, potentially affecting other active users of that pool.
-      // The PgPoolSharedService is responsible for the lifecycle of shared pools.
-    } else {
-      this.logger.debug(
-        `PromiseMemoizer Event: A WorkspaceDataSource (using dedicated pool) is being cleared. Calling safelyDestroyDataSource.`,
-      );
-      await this.safelyDestroyDataSource(dataSource);
-    }
-  }
 
   private async safelyDestroyDataSource(
     dataSource: WorkspaceDataSource,
@@ -144,13 +127,27 @@ export class WorkspaceDatasourceFactory {
           let cachedEntitySchemas: EntitySchema[];
 
           const {
-            objectMetadataMaps: cachedObjectMetadataMaps,
-            metadataVersion: metadataVersionForFinalUpToDateCheck,
+            flatObjectMetadataMaps,
+            flatFieldMetadataMaps,
+            flatIndexMaps,
           } =
-            await this.workspaceMetadataCacheService.getExistingOrRecomputeMetadataMaps(
+            await this.workspaceManyOrAllFlatEntityMapsCacheService.getOrRecomputeManyOrAllFlatEntityMaps(
               {
                 workspaceId,
+                flatMapsKeys: [
+                  'flatObjectMetadataMaps',
+                  'flatFieldMetadataMaps',
+                  'flatIndexMaps',
+                ],
               },
+            );
+
+          const { idByNameSingular: objectIdByNameSingular } =
+            buildObjectIdByNameMaps(flatObjectMetadataMaps);
+
+          const metadataVersionForFinalUpToDateCheck =
+            await this.workspaceCacheStorageService.getMetadataVersion(
+              workspaceId,
             );
 
           if (
@@ -167,18 +164,16 @@ export class WorkspaceDatasourceFactory {
               (option) => new EntitySchema(option),
             );
           } else {
-            const entitySchemas = await Promise.all(
-              Object.values(cachedObjectMetadataMaps.byId)
-                .filter(isDefined)
-                .map((objectMetadata) =>
-                  this.entitySchemaFactory.create(
-                    workspaceId,
-                    dataSourceMetadataVersion,
-                    objectMetadata,
-                    cachedObjectMetadataMaps,
-                  ),
+            const entitySchemas = Object.values(flatObjectMetadataMaps.byId)
+              .filter(isDefined)
+              .map((flatObjectMetadata) =>
+                this.entitySchemaFactory.create(
+                  workspaceId,
+                  flatObjectMetadata,
+                  flatObjectMetadataMaps,
+                  flatFieldMetadataMaps,
                 ),
-            );
+              );
 
             await this.workspaceCacheStorageService.setORMEntitySchema(
               workspaceId,
@@ -192,7 +187,10 @@ export class WorkspaceDatasourceFactory {
           const workspaceDataSource = new WorkspaceDataSource(
             {
               workspaceId,
-              objectMetadataMaps: cachedObjectMetadataMaps,
+              flatObjectMetadataMaps,
+              flatFieldMetadataMaps,
+              flatIndexMaps,
+              objectIdByNameSingular,
               featureFlagsMap: cachedFeatureFlagMap,
               eventEmitterService: this.workspaceEventEmitter,
             },
@@ -224,13 +222,14 @@ export class WorkspaceDatasourceFactory {
             cachedFeatureFlagMap,
             cachedRolesPermissionsVersion,
             cachedRolesPermissions,
+            this.twentyConfigService.get('PG_ENABLE_POOL_SHARING'),
           );
 
           await workspaceDataSource.initialize();
 
           return workspaceDataSource;
         },
-        this.conditionalDestroyDataSource.bind(this),
+        this.safelyDestroyDataSource.bind(this),
       );
 
     if (!workspaceDataSource) {
@@ -256,8 +255,8 @@ export class WorkspaceDatasourceFactory {
     workspaceId,
   }: {
     workspaceId: string;
-  }): Promise<CacheResult<string, ObjectRecordsPermissionsByRoleId>> {
-    return getFromCacheWithRecompute<string, ObjectRecordsPermissionsByRoleId>({
+  }): Promise<CacheResult<string, ObjectsPermissionsByRoleId>> {
+    return this.getFromCacheWithRecomputeService.getFromCacheWithRecompute({
       workspaceId,
       getCacheData: () =>
         this.workspacePermissionsCacheStorageService.getRolesPermissions(
@@ -273,7 +272,6 @@ export class WorkspaceDatasourceFactory {
         }),
       cachedEntityName: ROLES_PERMISSIONS,
       exceptionCode: TwentyORMExceptionCode.ROLES_PERMISSIONS_VERSION_NOT_FOUND,
-      logger: this.logger,
     });
   }
 
@@ -310,7 +308,7 @@ export class WorkspaceDatasourceFactory {
   }: {
     workspaceDataSource: WorkspaceDataSource;
     cachedRolesPermissionsVersion: string;
-    cachedRolesPermissions: ObjectRecordsPermissionsByRoleId;
+    cachedRolesPermissions: ObjectsPermissionsByRoleId;
   }): Promise<void> {
     this.updateWorkspaceDataSourceIfNeeded({
       workspaceDataSource,
@@ -364,6 +362,11 @@ export class WorkspaceDatasourceFactory {
       );
     }
 
+    await this.workspaceCacheStorageService.setMetadataVersion(
+      workspaceId,
+      workspace.metadataVersion,
+    );
+
     return workspace.metadataVersion;
   }
 
@@ -371,7 +374,7 @@ export class WorkspaceDatasourceFactory {
     try {
       await this.promiseMemoizer.clearKeys(
         `${workspaceId}-`,
-        this.conditionalDestroyDataSource.bind(this),
+        this.safelyDestroyDataSource.bind(this),
       );
     } catch (error) {
       // Log and swallow any errors during cleanup to prevent crashes

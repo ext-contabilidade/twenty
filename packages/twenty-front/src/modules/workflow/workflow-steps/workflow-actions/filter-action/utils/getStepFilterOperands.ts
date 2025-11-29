@@ -1,92 +1,116 @@
-import { ViewFilterOperand } from 'twenty-shared/src/types';
+import { ViewFilterOperand } from 'twenty-shared/types';
 
 const emptyOperands = [
-  ViewFilterOperand.IsEmpty,
-  ViewFilterOperand.IsNotEmpty,
+  ViewFilterOperand.IS_EMPTY,
+  ViewFilterOperand.IS_NOT_EMPTY,
 ] as const;
 
 const relationOperands = [
-  ViewFilterOperand.Is,
-  ViewFilterOperand.IsNot,
+  ViewFilterOperand.IS,
+  ViewFilterOperand.IS_NOT,
 ] as const;
 
 const defaultOperands = [
-  ViewFilterOperand.Is,
-  ViewFilterOperand.IsNot,
-  ViewFilterOperand.Contains,
-  ViewFilterOperand.DoesNotContain,
-  ViewFilterOperand.GreaterThanOrEqual,
-  ViewFilterOperand.LessThanOrEqual,
+  ViewFilterOperand.IS,
+  ViewFilterOperand.IS_NOT,
+  ViewFilterOperand.CONTAINS,
+  ViewFilterOperand.DOES_NOT_CONTAIN,
+  ViewFilterOperand.GREATER_THAN_OR_EQUAL,
+  ViewFilterOperand.LESS_THAN_OR_EQUAL,
   ...emptyOperands,
 ] as const;
 
 export const FILTER_OPERANDS_MAP = {
   TEXT: [
-    ViewFilterOperand.Contains,
-    ViewFilterOperand.DoesNotContain,
+    ViewFilterOperand.CONTAINS,
+    ViewFilterOperand.DOES_NOT_CONTAIN,
     ...emptyOperands,
   ],
   NUMBER: [
-    ViewFilterOperand.GreaterThanOrEqual,
-    ViewFilterOperand.LessThanOrEqual,
+    ViewFilterOperand.IS,
+    ViewFilterOperand.GREATER_THAN_OR_EQUAL,
+    ViewFilterOperand.LESS_THAN_OR_EQUAL,
     ...emptyOperands,
   ],
   RAW_JSON: [
-    ViewFilterOperand.Contains,
-    ViewFilterOperand.DoesNotContain,
+    ViewFilterOperand.CONTAINS,
+    ViewFilterOperand.DOES_NOT_CONTAIN,
     ...emptyOperands,
   ],
   DATE_TIME: [
-    ViewFilterOperand.Is,
-    ViewFilterOperand.IsRelative,
-    ViewFilterOperand.IsInPast,
-    ViewFilterOperand.IsInFuture,
-    ViewFilterOperand.IsToday,
-    ViewFilterOperand.IsBefore,
-    ViewFilterOperand.IsAfter,
+    ViewFilterOperand.IS,
+    ViewFilterOperand.IS_IN_PAST,
+    ViewFilterOperand.IS_IN_FUTURE,
+    ViewFilterOperand.IS_TODAY,
+    ViewFilterOperand.IS_BEFORE,
+    ViewFilterOperand.IS_AFTER,
+    ViewFilterOperand.IS_RELATIVE,
     ...emptyOperands,
   ],
-  DATE: [
-    ViewFilterOperand.Is,
-    ViewFilterOperand.IsRelative,
-    ViewFilterOperand.IsInPast,
-    ViewFilterOperand.IsInFuture,
-    ViewFilterOperand.IsToday,
-    ViewFilterOperand.IsBefore,
-    ViewFilterOperand.IsAfter,
-    ...emptyOperands,
-  ],
-  RATING: [ViewFilterOperand.Is, ViewFilterOperand.IsNot, ...emptyOperands],
+  RATING: [ViewFilterOperand.IS, ViewFilterOperand.IS_NOT, ...emptyOperands],
   RELATION: [...relationOperands, ...emptyOperands],
   MULTI_SELECT: [
-    ViewFilterOperand.Contains,
-    ViewFilterOperand.DoesNotContain,
+    ViewFilterOperand.CONTAINS,
+    ViewFilterOperand.DOES_NOT_CONTAIN,
     ...emptyOperands,
   ],
-  SELECT: [ViewFilterOperand.Is, ViewFilterOperand.IsNot, ...emptyOperands],
+  SELECT: [ViewFilterOperand.IS, ViewFilterOperand.IS_NOT, ...emptyOperands],
   ARRAY: [
-    ViewFilterOperand.Contains,
-    ViewFilterOperand.DoesNotContain,
+    ViewFilterOperand.CONTAINS,
+    ViewFilterOperand.DOES_NOT_CONTAIN,
     ...emptyOperands,
   ],
-  BOOLEAN: [ViewFilterOperand.Is],
-  UUID: [ViewFilterOperand.Is],
+  BOOLEAN: [ViewFilterOperand.IS],
+  UUID: [ViewFilterOperand.IS, ViewFilterOperand.IS_NOT],
   NUMERIC: [
-    ViewFilterOperand.GreaterThanOrEqual,
-    ViewFilterOperand.LessThanOrEqual,
+    ViewFilterOperand.IS,
+    ViewFilterOperand.GREATER_THAN_OR_EQUAL,
+    ViewFilterOperand.LESS_THAN_OR_EQUAL,
     ...emptyOperands,
   ],
 };
 
-export const getViewFilterOperands = ({
+export const COMPOSITE_FIELD_FILTER_OPERANDS_MAP = {
+  CURRENCY: {
+    currencyCode: [
+      ViewFilterOperand.IS,
+      ViewFilterOperand.IS_NOT,
+      ...emptyOperands,
+    ],
+    amountMicros: [
+      ViewFilterOperand.GREATER_THAN_OR_EQUAL,
+      ViewFilterOperand.LESS_THAN_OR_EQUAL,
+      ViewFilterOperand.IS,
+      ViewFilterOperand.IS_NOT,
+      ...emptyOperands,
+    ],
+  },
+};
+
+export const getStepFilterOperands = ({
   filterType,
+  subFieldName,
 }: {
-  filterType: string;
+  filterType: string | undefined;
+  subFieldName: string | undefined;
 }): readonly ViewFilterOperand[] => {
   switch (filterType) {
     case 'TEXT':
+    case 'EMAILS':
+    case 'FULL_NAME':
+    case 'ADDRESS':
+    case 'LINKS':
+    case 'PHONES':
       return FILTER_OPERANDS_MAP.TEXT;
+    case 'CURRENCY': {
+      if (subFieldName === 'currencyCode') {
+        return COMPOSITE_FIELD_FILTER_OPERANDS_MAP.CURRENCY.currencyCode;
+      } else {
+        return COMPOSITE_FIELD_FILTER_OPERANDS_MAP.CURRENCY.amountMicros;
+      }
+    }
     case 'NUMBER':
+    case 'number':
       return FILTER_OPERANDS_MAP.NUMBER;
     case 'RAW_JSON':
       return FILTER_OPERANDS_MAP.RAW_JSON;
@@ -102,8 +126,10 @@ export const getViewFilterOperands = ({
     case 'SELECT':
       return FILTER_OPERANDS_MAP.SELECT;
     case 'ARRAY':
+    case 'array':
       return FILTER_OPERANDS_MAP.ARRAY;
     case 'BOOLEAN':
+    case 'boolean':
       return FILTER_OPERANDS_MAP.BOOLEAN;
     case 'UUID':
       return FILTER_OPERANDS_MAP.UUID;

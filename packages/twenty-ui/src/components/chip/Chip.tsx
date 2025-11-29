@@ -1,6 +1,6 @@
-import { Theme, withTheme } from '@emotion/react';
+import { type Theme, withTheme } from '@emotion/react';
 import { styled } from '@linaria/react';
-import { ReactNode } from 'react';
+import { type ReactNode } from 'react';
 
 import { OverflowingTextWithTooltip } from '@ui/display/tooltip/OverflowingTextWithTooltip';
 
@@ -77,7 +77,7 @@ const StyledContainer = withTheme(styled.div<
   max-width: ${({ maxWidth }) =>
     maxWidth
       ? `calc(${maxWidth}px - 2 * var(--chip-horizontal-padding))`
-      : '200px'};
+      : '100%'};
   overflow: hidden;
   padding: var(--chip-vertical-padding) var(--chip-horizontal-padding);
   user-select: none;
@@ -126,6 +126,7 @@ const StyledContainer = withTheme(styled.div<
       : 'var(--chip-horizontal-padding)'};
 `);
 
+// TODO: refactor this
 const renderRightComponent = (
   rightComponent: (() => ReactNode) | ReactNode | null,
 ) => {
@@ -166,7 +167,7 @@ export const Chip = ({
       {leftComponent}
       {!isLabelHidden && label && label.trim() ? (
         <OverflowingTextWithTooltip size={size} text={label} />
-      ) : !forceEmptyText ? (
+      ) : !forceEmptyText && !isLabelHidden ? (
         <StyledDiv>Untitled</StyledDiv>
       ) : (
         ''

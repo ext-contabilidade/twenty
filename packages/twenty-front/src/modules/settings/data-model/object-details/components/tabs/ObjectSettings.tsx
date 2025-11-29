@@ -1,11 +1,14 @@
-import { ObjectMetadataItem } from '@/object-metadata/types/ObjectMetadataItem';
+import { type ObjectMetadataItem } from '@/object-metadata/types/ObjectMetadataItem';
 
+import { currentWorkspaceState } from '@/auth/states/currentWorkspaceState';
 import { useUpdateOneObjectMetadataItem } from '@/object-metadata/hooks/useUpdateOneObjectMetadataItem';
+import { isObjectMetadataSettingsReadOnly } from '@/object-record/read-only/utils/isObjectMetadataSettingsReadOnly';
 import { SettingsUpdateDataModelObjectAboutForm } from '@/settings/data-model/object-details/components/SettingsUpdateDataModelObjectAboutForm';
 import { SettingsDataModelObjectSettingsFormCard } from '@/settings/data-model/objects/forms/components/SettingsDataModelObjectSettingsFormCard';
-import { SettingsPath } from '@/types/SettingsPath';
 import styled from '@emotion/styled';
 import { useLingui } from '@lingui/react/macro';
+import { useRecoilValue } from 'recoil';
+import { SettingsPath } from 'twenty-shared/types';
 import { H2Title, IconArchive } from 'twenty-ui/display';
 import { Button } from 'twenty-ui/input';
 import { Section } from 'twenty-ui/layout';
@@ -27,14 +30,24 @@ const StyledFormSection = styled(Section)`
 
 export const ObjectSettings = ({ objectMetadataItem }: ObjectSettingsProps) => {
   const { t } = useLingui();
+  const currentWorkspace = useRecoilValue(currentWorkspaceState);
+  const readonly = isObjectMetadataSettingsReadOnly({
+    objectMetadataItem,
+    workspaceCustomApplicationId:
+      currentWorkspace?.workspaceCustomApplication?.id,
+  });
   const navigate = useNavigateSettings();
   const { updateOneObjectMetadataItem } = useUpdateOneObjectMetadataItem();
+
   const handleDisable = async () => {
-    await updateOneObjectMetadataItem({
+    const result = await updateOneObjectMetadataItem({
       idToUpdate: objectMetadataItem.id,
       updatePayload: { isActive: false },
     });
-    navigate(SettingsPath.Objects);
+
+    if (result.status === 'successful') {
+      navigate(SettingsPath.Objects);
+    }
   };
 
   return (
@@ -59,17 +72,22 @@ export const ObjectSettings = ({ objectMetadataItem }: ObjectSettingsProps) => {
           />
         </Section>
       </StyledFormSection>
-      <StyledFormSection>
-        <Section>
-          <H2Title title={t`Danger zone`} description={t`Deactivate object`} />
-          <Button
-            Icon={IconArchive}
-            title={t`Deactivate`}
-            size="small"
-            onClick={handleDisable}
-          />
-        </Section>
-      </StyledFormSection>
+      {!readonly && (
+        <StyledFormSection>
+          <Section>
+            <H2Title
+              title={t`Danger zone`}
+              description={t`Deactivate object`}
+            />
+            <Button
+              Icon={IconArchive}
+              title={t`Deactivate`}
+              size="small"
+              onClick={handleDisable}
+            />
+          </Section>
+        </StyledFormSection>
+      )}
     </StyledContentContainer>
   );
 };

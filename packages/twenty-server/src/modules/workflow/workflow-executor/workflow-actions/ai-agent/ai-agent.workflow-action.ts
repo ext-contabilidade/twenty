@@ -1,32 +1,37 @@
 import { Injectable } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 
+import { resolveInput } from 'twenty-shared/utils';
 import { Repository } from 'typeorm';
 
-import { WorkflowAction } from 'src/modules/workflow/workflow-executor/interfaces/workflow-action.interface';
+import { type WorkflowAction } from 'src/modules/workflow/workflow-executor/interfaces/workflow-action.interface';
 
-import { AIBillingService } from 'src/engine/core-modules/ai/services/ai-billing.service';
-import { AgentExecutionService } from 'src/engine/metadata-modules/agent/agent-execution.service';
-import { AgentEntity } from 'src/engine/metadata-modules/agent/agent.entity';
+import { AgentAsyncExecutorService } from 'src/engine/metadata-modules/ai/ai-agent-execution/services/agent-async-executor.service';
 import {
   AgentException,
   AgentExceptionCode,
-} from 'src/engine/metadata-modules/agent/agent.exception';
+} from 'src/engine/metadata-modules/ai/ai-agent/agent.exception';
+import { AgentEntity } from 'src/engine/metadata-modules/ai/ai-agent/entities/agent.entity';
+import { AIBillingService } from 'src/engine/metadata-modules/ai/ai-billing/services/ai-billing.service';
+import { DEFAULT_SMART_MODEL } from 'src/engine/metadata-modules/ai/ai-models/constants/ai-models.const';
 import {
   WorkflowStepExecutorException,
   WorkflowStepExecutorExceptionCode,
 } from 'src/modules/workflow/workflow-executor/exceptions/workflow-step-executor.exception';
-import { WorkflowActionInput } from 'src/modules/workflow/workflow-executor/types/workflow-action-input';
-import { WorkflowActionOutput } from 'src/modules/workflow/workflow-executor/types/workflow-action-output.type';
+import { WorkflowExecutionContextService } from 'src/modules/workflow/workflow-executor/services/workflow-execution-context.service';
+import { type WorkflowActionInput } from 'src/modules/workflow/workflow-executor/types/workflow-action-input';
+import { type WorkflowActionOutput } from 'src/modules/workflow/workflow-executor/types/workflow-action-output.type';
+import { findStepOrThrow } from 'src/modules/workflow/workflow-executor/utils/find-step-or-throw.util';
 
 import { isWorkflowAiAgentAction } from './guards/is-workflow-ai-agent-action.guard';
 
 @Injectable()
 export class AiAgentWorkflowAction implements WorkflowAction {
   constructor(
-    private readonly agentExecutionService: AgentExecutionService,
+    private readonly aiAgentExecutionService: AgentAsyncExecutorService,
     private readonly aiBillingService: AIBillingService,
-    @InjectRepository(AgentEntity, 'core')
+    private readonly workflowExecutionContextService: WorkflowExecutionContextService,
+    @InjectRepository(AgentEntity)
     private readonly agentRepository: Repository<AgentEntity>,
   ) {}
 
@@ -34,15 +39,12 @@ export class AiAgentWorkflowAction implements WorkflowAction {
     currentStepId,
     steps,
     context,
+    runInfo,
   }: WorkflowActionInput): Promise<WorkflowActionOutput> {
-    const step = steps.find((step) => step.id === currentStepId);
-
-    if (!step) {
-      throw new WorkflowStepExecutorException(
-        'Step not found',
-        WorkflowStepExecutorExceptionCode.STEP_NOT_FOUND,
-      );
-    }
+    const step = findStepOrThrow({
+      stepId: currentStepId,
+      steps,
+    });
 
     if (!isWorkflowAiAgentAction(step)) {
       throw new WorkflowStepExecutorException(
@@ -51,34 +53,47 @@ export class AiAgentWorkflowAction implements WorkflowAction {
       );
     }
 
-    const { agentId } = step.settings.input;
+    const { agentId, prompt } = step.settings.input;
     const workspaceId = context.workspaceId as string;
 
     try {
-      const agent = await this.agentRepository.findOne({
-        where: {
-          id: agentId,
-          workspaceId,
-        },
-      });
+      let agent: AgentEntity | null = null;
 
-      if (!agent) {
+      if (agentId) {
+        agent = await this.agentRepository.findOne({
+          where: {
+            id: agentId,
+            workspaceId,
+          },
+        });
+      }
+
+      if (agentId && !agent) {
         throw new AgentException(
           `Agent with id ${agentId} not found`,
           AgentExceptionCode.AGENT_NOT_FOUND,
         );
       }
 
-      const { result, usage } = await this.agentExecutionService.executeAgent({
-        agent,
-        context,
-        schema: step.settings.outputSchema,
-      });
+      const executionContext =
+        await this.workflowExecutionContextService.getExecutionContext(runInfo);
+
+      const { result, usage } = await this.aiAgentExecutionService.executeAgent(
+        {
+          agent,
+          userPrompt: resolveInput(prompt, context) as string,
+          actorContext: executionContext.isActingOnBehalfOfUser
+            ? executionContext.initiator
+            : undefined,
+          rolePermissionConfig: executionContext.rolePermissionConfig,
+        },
+      );
 
       await this.aiBillingService.calculateAndBillUsage(
-        agent.modelId,
+        agent?.modelId ?? DEFAULT_SMART_MODEL,
         usage,
         workspaceId,
+        agent?.id || null,
       );
 
       return {

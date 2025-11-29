@@ -7,7 +7,7 @@ import { TwentyORMManager } from 'src/engine/twenty-orm/twenty-orm.manager';
 import { isThrottled } from 'src/modules/connected-account/utils/is-throttled';
 import {
   MessageChannelSyncStage,
-  MessageChannelWorkspaceEntity,
+  type MessageChannelWorkspaceEntity,
 } from 'src/modules/messaging/common/standard-objects/message-channel.workspace-entity';
 import { MessagingMessagesImportService } from 'src/modules/messaging/message-import-manager/services/messaging-messages-import.service';
 import { MessagingMonitoringService } from 'src/modules/messaging/monitoring/services/messaging-monitoring.service';
@@ -74,7 +74,7 @@ export class MessagingMessagesImportJob {
 
     if (
       messageChannel.syncStage !==
-      MessageChannelSyncStage.MESSAGES_IMPORT_PENDING
+      MessageChannelSyncStage.MESSAGES_IMPORT_SCHEDULED
     ) {
       return;
     }

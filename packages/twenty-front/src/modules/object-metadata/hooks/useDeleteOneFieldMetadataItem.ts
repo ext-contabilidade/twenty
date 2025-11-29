@@ -1,61 +1,95 @@
-import { useMutation } from '@apollo/client';
+import { useDeleteOneFieldMetadataItemMutation } from '~/generated-metadata/graphql';
 
-import {
-  DeleteOneFieldMetadataItemMutation,
-  DeleteOneFieldMetadataItemMutationVariables,
-} from '~/generated-metadata/graphql';
-
-import { useApolloCoreClient } from '@/object-metadata/hooks/useApolloCoreClient';
-import { useRefreshObjectMetadataItems } from '@/object-metadata/hooks/useRefreshObjectMetadataItem';
-import { recordIndexKanbanAggregateOperationState } from '@/object-record/record-index/states/recordIndexKanbanAggregateOperationState';
+import { MAIN_CONTEXT_STORE_INSTANCE_ID } from '@/context-store/constants/MainContextStoreInstanceId';
+import { useMetadataErrorHandler } from '@/metadata-error-handler/hooks/useMetadataErrorHandler';
+import { useRefreshObjectMetadataItems } from '@/object-metadata/hooks/useRefreshObjectMetadataItems';
+import { type MetadataRequestResult } from '@/object-metadata/types/MetadataRequestResult.type';
+import { recordIndexGroupAggregateFieldMetadataItemComponentState } from '@/object-record/record-index/states/recordIndexGroupAggregateFieldMetadataItemComponentState';
+import { recordIndexGroupAggregateOperationComponentState } from '@/object-record/record-index/states/recordIndexGroupAggregateOperationComponentState';
 import { AggregateOperations } from '@/object-record/record-table/constants/AggregateOperations';
-import { useRecoilState } from 'recoil';
-import { DELETE_ONE_FIELD_METADATA_ITEM } from '../graphql/mutations';
+import { useSnackBar } from '@/ui/feedback/snack-bar-manager/hooks/useSnackBar';
+import { useRecoilComponentState } from '@/ui/utilities/state/component-state/hooks/useRecoilComponentState';
+import { useSetRecoilComponentState } from '@/ui/utilities/state/component-state/hooks/useSetRecoilComponentState';
+import { useRefreshCoreViewsByObjectMetadataId } from '@/views/hooks/useRefreshCoreViewsByObjectMetadataId';
+import { ApolloError } from '@apollo/client';
+import { t } from '@lingui/core/macro';
 
 export const useDeleteOneFieldMetadataItem = () => {
-  const [mutate] = useMutation<
-    DeleteOneFieldMetadataItemMutation,
-    DeleteOneFieldMetadataItemMutationVariables
-  >(DELETE_ONE_FIELD_METADATA_ITEM);
+  const [deleteOneFieldMetadataItemMutation] =
+    useDeleteOneFieldMetadataItemMutation();
 
   const { refreshObjectMetadataItems } =
     useRefreshObjectMetadataItems('network-only');
+  const { refreshCoreViewsByObjectMetadataId } =
+    useRefreshCoreViewsByObjectMetadataId();
+
+  const { handleMetadataError } = useMetadataErrorHandler();
+  const { enqueueErrorSnackBar } = useSnackBar();
+
+  const setRecordIndexGroupAggregateOperation = useSetRecoilComponentState(
+    recordIndexGroupAggregateOperationComponentState,
+    MAIN_CONTEXT_STORE_INSTANCE_ID,
+  );
 
   const [
-    recordIndexKanbanAggregateOperation,
-    setRecordIndexKanbanAggregateOperation,
-  ] = useRecoilState(recordIndexKanbanAggregateOperationState);
-
-  const apolloCoreClient = useApolloCoreClient();
+    recordIndexGroupAggregateFieldMetadataItem,
+    setRecordIndexGroupAggregateFieldMetadataItem,
+  ] = useRecoilComponentState(
+    recordIndexGroupAggregateFieldMetadataItemComponentState,
+    MAIN_CONTEXT_STORE_INSTANCE_ID,
+  );
 
   const resetRecordIndexKanbanAggregateOperation = async (
-    idToDelete: DeleteOneFieldMetadataItemMutationVariables['idToDelete'],
+    idToDelete: string,
   ) => {
-    if (recordIndexKanbanAggregateOperation?.fieldMetadataId === idToDelete) {
-      setRecordIndexKanbanAggregateOperation({
-        operation: AggregateOperations.COUNT,
-        fieldMetadataId: null,
-      });
+    if (recordIndexGroupAggregateFieldMetadataItem?.id === idToDelete) {
+      setRecordIndexGroupAggregateOperation(AggregateOperations.COUNT);
+      setRecordIndexGroupAggregateFieldMetadataItem(null);
     }
-    await apolloCoreClient.refetchQueries({
-      include: ['FindManyViews'],
-    });
   };
 
-  const deleteOneFieldMetadataItem = async (
-    idToDelete: DeleteOneFieldMetadataItemMutationVariables['idToDelete'],
-  ) => {
-    const result = await mutate({
-      variables: {
-        idToDelete,
-      },
-    });
+  const deleteOneFieldMetadataItem = async ({
+    idToDelete,
+    objectMetadataId,
+  }: {
+    idToDelete: string;
+    objectMetadataId: string;
+  }): Promise<
+    MetadataRequestResult<
+      Awaited<ReturnType<typeof deleteOneFieldMetadataItemMutation>>
+    >
+  > => {
+    try {
+      const response = await deleteOneFieldMetadataItemMutation({
+        variables: {
+          idToDelete,
+        },
+      });
 
-    await resetRecordIndexKanbanAggregateOperation(idToDelete);
+      // TODO: see if we can remove this lin altogether
+      await resetRecordIndexKanbanAggregateOperation(idToDelete);
 
-    await refreshObjectMetadataItems();
+      await refreshObjectMetadataItems();
+      await refreshCoreViewsByObjectMetadataId(objectMetadataId);
 
-    return result;
+      return {
+        status: 'successful',
+        response,
+      };
+    } catch (error) {
+      if (error instanceof ApolloError) {
+        handleMetadataError(error, {
+          primaryMetadataName: 'fieldMetadata',
+        });
+      } else {
+        enqueueErrorSnackBar({ message: t`An error occurred.` });
+      }
+
+      return {
+        status: 'failed',
+        error,
+      };
+    }
   };
 
   return {

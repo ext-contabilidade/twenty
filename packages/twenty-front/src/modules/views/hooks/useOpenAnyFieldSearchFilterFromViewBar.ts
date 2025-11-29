@@ -1,32 +1,51 @@
 import { objectFilterDropdownAnyFieldSearchIsSelectedComponentState } from '@/object-record/object-filter-dropdown/states/objectFilterDropdownAnyFieldSearchIsSelectedComponentState';
 import { objectFilterDropdownSearchInputComponentState } from '@/object-record/object-filter-dropdown/states/objectFilterDropdownSearchInputComponentState';
-import { useRecoilComponentValueV2 } from '@/ui/utilities/state/component-state/hooks/useRecoilComponentValueV2';
-import { useSetRecoilComponentStateV2 } from '@/ui/utilities/state/component-state/hooks/useSetRecoilComponentStateV2';
-import { viewAnyFieldSearchValueComponentState } from '@/views/states/viewAnyFieldSearchValueComponentState';
+import { anyFieldFilterValueComponentState } from '@/object-record/record-filter/states/anyFieldFilterValueComponentState';
+import { useRecordIndexContextOrThrow } from '@/object-record/record-index/contexts/RecordIndexContext';
+import { useRecoilComponentValue } from '@/ui/utilities/state/component-state/hooks/useRecoilComponentValue';
+import { useSetRecoilComponentState } from '@/ui/utilities/state/component-state/hooks/useSetRecoilComponentState';
+import { t } from '@lingui/core/macro';
 import { isNonEmptyString } from '@sniptt/guards';
 
 export const useOpenAnyFieldSearchFilterFromViewBar = () => {
-  const setViewAnyFieldSearchValueComponentState = useSetRecoilComponentStateV2(
-    viewAnyFieldSearchValueComponentState,
+  const setAnyFieldFilterValue = useSetRecoilComponentState(
+    anyFieldFilterValueComponentState,
   );
 
+  const { objectMetadataItem } = useRecordIndexContextOrThrow();
+
   const setObjectFilterDropdownAnyFieldSearchIsSelectedComponentState =
-    useSetRecoilComponentStateV2(
+    useSetRecoilComponentState(
       objectFilterDropdownAnyFieldSearchIsSelectedComponentState,
     );
 
-  const objectFilterDropdownSearchInput = useRecoilComponentValueV2(
+  const objectFilterDropdownSearchInput = useRecoilComponentValue(
     objectFilterDropdownSearchInputComponentState,
   );
+
+  const translatedLabel = t`Search any field`;
 
   const openAnyFieldSearchFilterFromViewBar = () => {
     const userHasAlreadyEnteredSearchInputForObjectDropdownSearch =
       isNonEmptyString(objectFilterDropdownSearchInput);
 
-    if (userHasAlreadyEnteredSearchInputForObjectDropdownSearch) {
+    const userInputIsMatchingAListMenuItem =
+      objectMetadataItem.fields.some((fieldMetadataItem) =>
+        fieldMetadataItem.label
+          .toLocaleLowerCase()
+          .includes(objectFilterDropdownSearchInput.toLocaleLowerCase()),
+      ) ||
+      translatedLabel
+        .toLocaleLowerCase()
+        .includes(objectFilterDropdownSearchInput.toLocaleLowerCase());
+
+    if (
+      userHasAlreadyEnteredSearchInputForObjectDropdownSearch &&
+      !userInputIsMatchingAListMenuItem
+    ) {
       const filterValue = objectFilterDropdownSearchInput;
 
-      setViewAnyFieldSearchValueComponentState(filterValue);
+      setAnyFieldFilterValue(filterValue);
     }
 
     setObjectFilterDropdownAnyFieldSearchIsSelectedComponentState(true);

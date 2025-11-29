@@ -1,11 +1,11 @@
-import { FeatureFlagKey } from 'src/engine/core-modules/feature-flag/enums/feature-flag-key.enum';
+import { type FeatureFlagKey } from 'src/engine/core-modules/feature-flag/enums/feature-flag-key.enum';
 import { isPublicFeatureFlag } from 'src/engine/core-modules/lab/utils/is-public-feature-flag.util';
 import { TypedReflect } from 'src/utils/typed-reflect';
 
 export interface WorkspaceGateOptions {
   featureFlag: string;
   excludeFromDatabase?: boolean;
-  excludeFromGraphQL?: boolean;
+  excludeFromWorkspaceApi?: boolean;
 }
 
 export function WorkspaceGate(options: WorkspaceGateOptions) {
@@ -21,7 +21,7 @@ export function WorkspaceGate(options: WorkspaceGateOptions) {
   const gateOptions = {
     featureFlag: options.featureFlag,
     excludeFromDatabase: options.excludeFromDatabase ?? true,
-    excludeFromGraphQL: options.excludeFromGraphQL ?? true,
+    excludeFromWorkspaceApi: options.excludeFromWorkspaceApi ?? true,
   };
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any

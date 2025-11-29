@@ -1,7 +1,5 @@
 import { useFieldMetadataItem } from '@/object-metadata/hooks/useFieldMetadataItem';
 import { useFilteredObjectMetadataItems } from '@/object-metadata/hooks/useFilteredObjectMetadataItems';
-import { CoreObjectNameSingular } from '@/object-metadata/types/CoreObjectNameSingular';
-import { useFindManyRecords } from '@/object-record/hooks/useFindManyRecords';
 import { SaveAndCancelButtons } from '@/settings/components/SaveAndCancelButtons/SaveAndCancelButtons';
 import { SettingsPageContainer } from '@/settings/components/SettingsPageContainer';
 import { SettingsDataModelNewFieldBreadcrumbDropDown } from '@/settings/data-model/components/SettingsDataModelNewFieldBreadcrumbDropDown';
@@ -10,27 +8,26 @@ import { SettingsDataModelFieldDescriptionForm } from '@/settings/data-model/fie
 import { SettingsDataModelFieldIconLabelForm } from '@/settings/data-model/fields/forms/components/SettingsDataModelFieldIconLabelForm';
 import { SettingsDataModelFieldSettingsFormCard } from '@/settings/data-model/fields/forms/components/SettingsDataModelFieldSettingsFormCard';
 import { settingsFieldFormSchema } from '@/settings/data-model/fields/forms/validation-schemas/settingsFieldFormSchema';
-import { SettingsFieldType } from '@/settings/data-model/types/SettingsFieldType';
-import { AppPath } from '@/types/AppPath';
-import { SettingsPath } from '@/types/SettingsPath';
 import { useSnackBar } from '@/ui/feedback/snack-bar-manager/hooks/useSnackBar';
 import { SubMenuTopBarContainer } from '@/ui/layout/page/components/SubMenuTopBarContainer';
-import { View } from '@/views/types/View';
-import { ViewType } from '@/views/types/ViewType';
-import { ApolloError } from '@apollo/client';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { useLingui } from '@lingui/react/macro';
 import { useEffect, useState } from 'react';
 import { FormProvider, useForm } from 'react-hook-form';
 import { useParams, useSearchParams } from 'react-router-dom';
+import {
+  AppPath,
+  type RelationCreationPayload,
+  SettingsPath,
+} from 'twenty-shared/types';
+import { getSettingsPath } from 'twenty-shared/utils';
 import { H2Title } from 'twenty-ui/display';
 import { Section } from 'twenty-ui/layout';
-import { z } from 'zod';
+import { type z } from 'zod';
 import { FieldMetadataType } from '~/generated-metadata/graphql';
 import { useNavigateApp } from '~/hooks/useNavigateApp';
 import { useNavigateSettings } from '~/hooks/useNavigateSettings';
 import { DEFAULT_ICONS_BY_FIELD_TYPE } from '~/pages/settings/data-model/constants/DefaultIconsByFieldType';
-import { getSettingsPath } from '~/utils/navigation/getSettingsPath';
 
 type SettingsDataModelNewFieldFormValues = z.infer<
   ReturnType<typeof settingsFieldFormSchema>
@@ -48,14 +45,14 @@ export const SettingsObjectNewFieldConfigure = () => {
   const { objectNamePlural = '' } = useParams();
   const [searchParams] = useSearchParams();
   const fieldType =
-    (searchParams.get('fieldType') as SettingsFieldType) ||
+    (searchParams.get('fieldType') as FieldMetadataType) ||
     FieldMetadataType.TEXT;
   const { enqueueErrorSnackBar } = useSnackBar();
 
-  const { findActiveObjectMetadataItemByNamePlural } =
+  const { findObjectMetadataItemByNamePlural } =
     useFilteredObjectMetadataItems();
   const activeObjectMetadataItem =
-    findActiveObjectMetadataItemByNamePlural(objectNamePlural);
+    findObjectMetadataItemByNamePlural(objectNamePlural);
   const { createMetadataField } = useFieldMetadataItem();
 
   const formConfig = useForm<SettingsDataModelNewFieldFormValues>({
@@ -84,27 +81,6 @@ export const SettingsObjectNewFieldConfigure = () => {
 
   const [isSaving, setIsSaving] = useState(false);
 
-  useFindManyRecords<View>({
-    objectNameSingular: CoreObjectNameSingular.View,
-    filter: {
-      type: { eq: ViewType.Table },
-      objectMetadataId: { eq: activeObjectMetadataItem?.id },
-    },
-  });
-
-  const relationObjectMetadataId = formConfig.watch(
-    'relation.objectMetadataId',
-  );
-
-  useFindManyRecords<View>({
-    objectNameSingular: CoreObjectNameSingular.View,
-    skip: !relationObjectMetadataId,
-    filter: {
-      type: { eq: ViewType.Table },
-      objectMetadataId: { eq: relationObjectMetadataId },
-    },
-  });
-
   useEffect(() => {
     if (!activeObjectMetadataItem) {
       navigateApp(AppPath.NotFound);
@@ -114,47 +90,85 @@ export const SettingsObjectNewFieldConfigure = () => {
   if (!activeObjectMetadataItem) return null;
 
   const { isValid, isSubmitting } = formConfig.formState;
+
   const canSave = isValid && !isSubmitting;
 
   const handleSave = async (
     formValues: SettingsDataModelNewFieldFormValues,
   ) => {
-    try {
-      setIsSaving(true);
-      if (
-        formValues.type === FieldMetadataType.RELATION &&
-        'relation' in formValues
-      ) {
-        const { relation: relationFormValues, ...fieldFormValues } = formValues;
-        await createMetadataField({
-          ...fieldFormValues,
-          objectMetadataId: activeObjectMetadataItem.id,
-          relationCreationPayload: {
-            type: relationFormValues.type,
-            targetObjectMetadataId: relationFormValues.objectMetadataId,
-            targetFieldLabel: relationFormValues.field.label,
-            targetFieldIcon: relationFormValues.field.icon,
-          },
-        });
-      } else {
-        await createMetadataField({
-          ...formValues,
-          objectMetadataId: activeObjectMetadataItem.id,
+    setIsSaving(true);
+
+    const createCleanUp = (
+      creationResult: Awaited<ReturnType<typeof createMetadataField>>,
+    ) => {
+      if (creationResult.status === 'successful') {
+        navigate(SettingsPath.ObjectDetail, {
+          objectNamePlural,
         });
       }
+      setIsSaving(false);
+    };
 
-      navigate(SettingsPath.ObjectDetail, {
-        objectNamePlural,
+    if (formValues.type !== FieldMetadataType.MORPH_RELATION) {
+      const creationResult = await createMetadataField({
+        ...formValues,
+        objectMetadataId: activeObjectMetadataItem.id,
       });
 
-      setIsSaving(false);
-    } catch (error) {
-      setIsSaving(false);
-      enqueueErrorSnackBar({
-        apolloError: error instanceof ApolloError ? error : undefined,
-      });
+      return createCleanUp(creationResult);
+    }
+
+    const {
+      morphRelationObjectMetadataIds,
+      targetFieldLabel,
+      iconOnDestination,
+      relationType,
+    } = formValues;
+
+    switch (true) {
+      case morphRelationObjectMetadataIds.length > 1: {
+        const creationResult = await createMetadataField({
+          ...formValues,
+          type: FieldMetadataType.MORPH_RELATION,
+          objectMetadataId: activeObjectMetadataItem.id,
+          isLabelSyncedWithName: false,
+          morphRelationsCreationPayload: morphRelationObjectMetadataIds.map(
+            (morphRelationObjectMetadataId: string) => ({
+              type: relationType,
+              targetObjectMetadataId: morphRelationObjectMetadataId,
+              targetFieldLabel,
+              targetFieldIcon: iconOnDestination,
+            }),
+          ),
+        });
+        return createCleanUp(creationResult);
+      }
+      case morphRelationObjectMetadataIds.length === 1: {
+        const relationCreationPayload = {
+          type: relationType,
+          targetObjectMetadataId: morphRelationObjectMetadataIds[0],
+          targetFieldLabel,
+          targetFieldIcon: iconOnDestination,
+        } satisfies RelationCreationPayload;
+
+        const creationResult = await createMetadataField({
+          ...formValues,
+          type: FieldMetadataType.RELATION,
+          objectMetadataId: activeObjectMetadataItem.id,
+          relationCreationPayload,
+        });
+
+        return createCleanUp(creationResult);
+      }
+      default: {
+        enqueueErrorSnackBar({
+          message: t`Please select at least one destination object for this relation.`,
+        });
+        return setIsSaving(false);
+      }
     }
   };
+
   if (!activeObjectMetadataItem) return null;
 
   return (
@@ -214,17 +228,13 @@ export const SettingsObjectNewFieldConfigure = () => {
           </Section>
           <Section>
             <H2Title
-              title={t`Values`}
-              description={t`The values of this field`}
+              title={t`Customization`}
+              description={t`Customize field settings`}
             />
             <SettingsDataModelFieldSettingsFormCard
-              fieldMetadataItem={{
-                icon: formConfig.watch('icon'),
-                label: formConfig.watch('label') || 'New Field',
-                settings: formConfig.watch('settings') || null,
-                type: fieldType as FieldMetadataType,
-              }}
-              objectMetadataItem={activeObjectMetadataItem}
+              fieldType={fieldType}
+              existingFieldMetadataId=""
+              objectNameSingular={activeObjectMetadataItem.nameSingular}
             />
           </Section>
           <Section>

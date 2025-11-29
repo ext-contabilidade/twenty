@@ -1,5 +1,7 @@
+import { assertUnreachable } from 'twenty-shared/utils';
+
 import {
-  GraphqlQueryRunnerException,
+  type GraphqlQueryRunnerException,
   GraphqlQueryRunnerExceptionCode,
 } from 'src/engine/api/graphql/graphql-query-runner/errors/graphql-query-runner.exception';
 import {
@@ -22,6 +24,8 @@ export const graphqlQueryRunnerExceptionHandler = (
     case GraphqlQueryRunnerExceptionCode.FIELD_NOT_FOUND:
     case GraphqlQueryRunnerExceptionCode.INVALID_QUERY_INPUT:
     case GraphqlQueryRunnerExceptionCode.NOT_IMPLEMENTED:
+    case GraphqlQueryRunnerExceptionCode.UPSERT_MULTIPLE_MATCHING_RECORDS_CONFLICT:
+    case GraphqlQueryRunnerExceptionCode.UPSERT_MAX_RECORDS_EXCEEDED:
       throw new UserInputError(error);
     case GraphqlQueryRunnerExceptionCode.RECORD_NOT_FOUND:
       throw new NotFoundError(error);
@@ -31,9 +35,7 @@ export const graphqlQueryRunnerExceptionHandler = (
     case GraphqlQueryRunnerExceptionCode.MISSING_SYSTEM_FIELD:
       throw error;
     default: {
-      const _exhaustiveCheck: never = error.code;
-
-      throw error;
+      return assertUnreachable(error.code);
     }
   }
 };

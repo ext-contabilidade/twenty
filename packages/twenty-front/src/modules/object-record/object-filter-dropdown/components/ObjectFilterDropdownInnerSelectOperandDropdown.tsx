@@ -1,4 +1,3 @@
-import { getFilterTypeFromFieldType } from '@/object-metadata/utils/formatFieldMetadataItemsAsFilterDefinitions';
 import { DATE_FILTER_TYPES } from '@/object-record/object-filter-dropdown/constants/DateFilterTypes';
 import { DATE_PICKER_DROPDOWN_CONTENT_WIDTH } from '@/object-record/object-filter-dropdown/constants/DatePickerDropdownContentWidth';
 import { useApplyObjectFilterDropdownOperand } from '@/object-record/object-filter-dropdown/hooks/useApplyObjectFilterDropdownOperand';
@@ -6,27 +5,27 @@ import { fieldMetadataItemUsedInDropdownComponentSelector } from '@/object-recor
 import { selectedOperandInDropdownComponentState } from '@/object-record/object-filter-dropdown/states/selectedOperandInDropdownComponentState';
 import { subFieldNameUsedInDropdownComponentState } from '@/object-record/object-filter-dropdown/states/subFieldNameUsedInDropdownComponentState';
 import { getOperandLabel } from '@/object-record/object-filter-dropdown/utils/getOperandLabel';
-import { RecordFilterOperand } from '@/object-record/record-filter/types/RecordFilterOperand';
+import { type RecordFilterOperand } from '@/object-record/record-filter/types/RecordFilterOperand';
 import { getRecordFilterOperands } from '@/object-record/record-filter/utils/getRecordFilterOperands';
 import { DropdownMenuInnerSelect } from '@/ui/layout/dropdown/components/DropdownMenuInnerSelect';
 import { GenericDropdownContentWidth } from '@/ui/layout/dropdown/constants/GenericDropdownContentWidth';
-import { useRecoilComponentValueV2 } from '@/ui/utilities/state/component-state/hooks/useRecoilComponentValueV2';
-import { isDefined } from 'twenty-shared/utils';
-import { SelectOption } from 'twenty-ui/input';
+import { useRecoilComponentValue } from '@/ui/utilities/state/component-state/hooks/useRecoilComponentValue';
+import { getFilterTypeFromFieldType, isDefined } from 'twenty-shared/utils';
+import { type SelectOption } from 'twenty-ui/input';
 
 const OBJECT_FILTER_DROPDOWN_INNER_SELECT_OPERAND_DROPDOWN_ID =
   'object-filter-dropdown-inner-select-operand-dropdown';
 
 export const ObjectFilterDropdownInnerSelectOperandDropdown = () => {
-  const selectedOperandInDropdown = useRecoilComponentValueV2(
+  const selectedOperandInDropdown = useRecoilComponentValue(
     selectedOperandInDropdownComponentState,
   );
 
-  const fieldMetadataItemUsedInDropdown = useRecoilComponentValueV2(
+  const fieldMetadataItemUsedInDropdown = useRecoilComponentValue(
     fieldMetadataItemUsedInDropdownComponentSelector,
   );
 
-  const subFieldNameUsedInDropdown = useRecoilComponentValueV2(
+  const subFieldNameUsedInDropdown = useRecoilComponentValue(
     subFieldNameUsedInDropdownComponentState,
   );
 

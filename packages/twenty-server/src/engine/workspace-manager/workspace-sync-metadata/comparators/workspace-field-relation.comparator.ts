@@ -1,15 +1,17 @@
 import { Injectable } from '@nestjs/common';
 
-import diff, { DifferenceChange, DifferenceRemove } from 'microdiff';
-import { FieldMetadataType } from 'twenty-shared/types';
+import diff, { type DifferenceChange, type DifferenceRemove } from 'microdiff';
+import {
+  type FieldMetadataType,
+  type FieldMetadataRelationSettings,
+} from 'twenty-shared/types';
 
-import { FieldMetadataRelationSettings } from 'src/engine/metadata-modules/field-metadata/interfaces/field-metadata-settings.interface';
 import {
   ComparatorAction,
-  FieldRelationComparatorResult,
+  type FieldRelationComparatorResult,
 } from 'src/engine/workspace-manager/workspace-sync-metadata/interfaces/comparator.interface';
 
-import { FieldMetadataEntity } from 'src/engine/metadata-modules/field-metadata/field-metadata.entity';
+import { type FieldMetadataEntity } from 'src/engine/metadata-modules/field-metadata/field-metadata.entity';
 import { transformMetadataForComparison } from 'src/engine/workspace-manager/workspace-sync-metadata/comparators/utils/transform-metadata-for-comparison.util';
 
 const fieldPropertiesToCompare = [
@@ -25,13 +27,21 @@ export class WorkspaceFieldRelationComparator {
   constructor() {}
 
   public compare(
-    originalFieldMetadataCollection: FieldMetadataEntity<FieldMetadataType.RELATION>[],
-    standardFieldMetadataCollection: FieldMetadataEntity<FieldMetadataType.RELATION>[],
+    originalFieldMetadataCollection: FieldMetadataEntity<
+      FieldMetadataType.RELATION | FieldMetadataType.MORPH_RELATION
+    >[],
+    standardFieldMetadataCollection: FieldMetadataEntity<
+      FieldMetadataType.RELATION | FieldMetadataType.MORPH_RELATION
+    >[],
   ): FieldRelationComparatorResult[] {
     const result: FieldRelationComparatorResult[] = [];
     const propertiesMap: Record<
       string,
-      Partial<FieldMetadataEntity<FieldMetadataType.RELATION>>
+      Partial<
+        FieldMetadataEntity<
+          FieldMetadataType.RELATION | FieldMetadataType.MORPH_RELATION
+        >
+      >
     > = {};
 
     // Double security to only compare non-custom fields
@@ -103,7 +113,9 @@ export class WorkspaceFieldRelationComparator {
       fieldMetadataDifferenceMap,
     )) {
       const findField = (
-        field: FieldMetadataEntity<FieldMetadataType.RELATION>,
+        field: FieldMetadataEntity<
+          FieldMetadataType.RELATION | FieldMetadataType.MORPH_RELATION
+        >,
       ) => {
         return field.standardId === fieldId;
       };
@@ -211,6 +223,8 @@ export class WorkspaceFieldRelationComparator {
             standardId: standardFieldMetadata.standardId ?? undefined,
             description: relationFieldMetadata.description ?? undefined,
             icon: relationFieldMetadata.icon ?? undefined,
+            type: standardFieldMetadata.type,
+            morphId: standardFieldMetadata.morphId ?? undefined,
           },
         });
       } else if (allOldPropertiesAreNull) {
@@ -222,6 +236,8 @@ export class WorkspaceFieldRelationComparator {
             standardId: standardFieldMetadata.standardId ?? undefined,
             description: relationFieldMetadata.description ?? undefined,
             icon: relationFieldMetadata.icon ?? undefined,
+            type: standardFieldMetadata.type,
+            morphId: standardFieldMetadata.morphId ?? undefined,
           },
         });
       } else if (allNewPropertiesAreNull) {
@@ -238,6 +254,8 @@ export class WorkspaceFieldRelationComparator {
             standardId: standardFieldMetadata.standardId ?? undefined,
             description: relationFieldMetadata.description ?? undefined,
             icon: relationFieldMetadata.icon ?? undefined,
+            type: standardFieldMetadata.type,
+            morphId: standardFieldMetadata.morphId ?? undefined,
           },
         });
       }

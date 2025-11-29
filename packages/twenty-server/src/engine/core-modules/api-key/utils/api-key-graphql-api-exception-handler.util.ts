@@ -1,3 +1,5 @@
+import { assertUnreachable } from 'twenty-shared/utils';
+
 import {
   ApiKeyException,
   ApiKeyExceptionCode,
@@ -21,10 +23,16 @@ export const apiKeyGraphqlApiExceptionHandler = (error: Error) => {
         throw new UserInputError(error.message, {
           userFriendlyMessage: error.userFriendlyMessage,
         });
+      case ApiKeyExceptionCode.API_KEY_NO_ROLE_ASSIGNED:
+        throw new ForbiddenError(error.message, {
+          userFriendlyMessage: error.userFriendlyMessage,
+        });
+      case ApiKeyExceptionCode.ROLE_CANNOT_BE_ASSIGNED_TO_API_KEYS:
+        throw new UserInputError(error.message, {
+          userFriendlyMessage: error.userFriendlyMessage,
+        });
       default: {
-        const _exhaustiveCheck: never = error.code;
-
-        throw error;
+        return assertUnreachable(error.code);
       }
     }
   }

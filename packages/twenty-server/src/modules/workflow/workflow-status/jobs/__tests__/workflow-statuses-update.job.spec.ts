@@ -1,4 +1,4 @@
-import { Test, TestingModule } from '@nestjs/testing';
+import { Test, type TestingModule } from '@nestjs/testing';
 import { getRepositoryToken } from '@nestjs/typeorm';
 
 import { ObjectMetadataEntity } from 'src/engine/metadata-modules/object-metadata/object-metadata.entity';
@@ -9,7 +9,7 @@ import { WorkflowVersionStatus } from 'src/modules/workflow/common/standard-obje
 import { WorkflowStatus } from 'src/modules/workflow/common/standard-objects/workflow.workspace-entity';
 import {
   WorkflowStatusesUpdateJob,
-  WorkflowVersionBatchEvent,
+  type WorkflowVersionBatchEvent,
   WorkflowVersionEventType,
 } from 'src/modules/workflow/workflow-status/jobs/workflow-statuses-update.job';
 
@@ -66,7 +66,7 @@ describe('WorkflowStatusesUpdate', () => {
           useValue: mockServerlessFunctionService,
         },
         {
-          provide: getRepositoryToken(ObjectMetadataEntity, 'core'),
+          provide: getRepositoryToken(ObjectMetadataEntity),
           useValue: {
             findOneOrFail: jest.fn().mockResolvedValue({
               nameSingular: 'workflow',
@@ -74,7 +74,7 @@ describe('WorkflowStatusesUpdate', () => {
           },
         },
         {
-          provide: getRepositoryToken(ServerlessFunctionEntity, 'core'),
+          provide: getRepositoryToken(ServerlessFunctionEntity),
           useValue: {
             findOneOrFail: jest.fn().mockResolvedValue({
               latestVersion: 'v2',

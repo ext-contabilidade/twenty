@@ -1,14 +1,14 @@
-import { FieldMetadataType } from 'twenty-shared/types';
+import {
+  FieldMetadataType,
+  type FieldMetadataSettings,
+  NumberDataType,
+} from 'twenty-shared/types';
 import { isDefined } from 'twenty-shared/utils';
 
-import {
-  FieldMetadataSettings,
-  NumberDataType,
-} from 'src/engine/metadata-modules/field-metadata/interfaces/field-metadata-settings.interface';
 import { RelationType } from 'src/engine/metadata-modules/field-metadata/interfaces/relation-type.interface';
 
-import { FieldMetadataEntity } from 'src/engine/metadata-modules/field-metadata/field-metadata.entity';
-import { ObjectMetadataEntity } from 'src/engine/metadata-modules/object-metadata/object-metadata.entity';
+import { type FieldMetadataEntity } from 'src/engine/metadata-modules/field-metadata/field-metadata.entity';
+import { type ObjectMetadataEntity } from 'src/engine/metadata-modules/object-metadata/object-metadata.entity';
 import { isFieldMetadataEntityOfType } from 'src/engine/utils/is-field-metadata-of-type.util';
 
 export type SchemaObject = {
@@ -256,6 +256,7 @@ export const convertObjectMetadataToSchemaProperties = ({
                 'EMAIL',
                 'CALENDAR',
                 'WORKFLOW',
+                'AGENT',
                 'API',
                 'IMPORT',
                 'MANUAL',

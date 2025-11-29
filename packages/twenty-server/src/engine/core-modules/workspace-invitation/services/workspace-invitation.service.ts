@@ -3,48 +3,54 @@ import { InjectRepository } from '@nestjs/typeorm';
 
 import crypto from 'crypto';
 
-import { i18n } from '@lingui/core';
-import { t } from '@lingui/core/macro';
+import { msg } from '@lingui/core/macro';
 import { render } from '@react-email/render';
 import { addMilliseconds } from 'date-fns';
 import ms from 'ms';
 import { SendInviteLinkEmail } from 'twenty-emails';
+import { AppPath } from 'twenty-shared/types';
+import { getAppPath, isDefined } from 'twenty-shared/utils';
 import { IsNull, Repository } from 'typeorm';
 
 import {
-  AppToken,
+  AppTokenEntity,
   AppTokenType,
 } from 'src/engine/core-modules/app-token/app-token.entity';
 import {
   AuthException,
   AuthExceptionCode,
 } from 'src/engine/core-modules/auth/auth.exception';
-import { DomainManagerService } from 'src/engine/core-modules/domain-manager/services/domain-manager.service';
+import { WorkspaceDomainsService } from 'src/engine/core-modules/domain/workspace-domains/services/workspace-domains.service';
 import { EmailService } from 'src/engine/core-modules/email/email.service';
+import { FileService } from 'src/engine/core-modules/file/services/file.service';
+import { I18nService } from 'src/engine/core-modules/i18n/i18n.service';
 import { OnboardingService } from 'src/engine/core-modules/onboarding/onboarding.service';
+import { ThrottlerService } from 'src/engine/core-modules/throttler/throttler.service';
 import { TwentyConfigService } from 'src/engine/core-modules/twenty-config/twenty-config.service';
-import { UserWorkspace } from 'src/engine/core-modules/user-workspace/user-workspace.entity';
-import { SendInvitationsOutput } from 'src/engine/core-modules/workspace-invitation/dtos/send-invitations.output';
+import { UserWorkspaceEntity } from 'src/engine/core-modules/user-workspace/user-workspace.entity';
+import { type SendInvitationsOutput } from 'src/engine/core-modules/workspace-invitation/dtos/send-invitations.output';
 import { castAppTokenToWorkspaceInvitationUtil } from 'src/engine/core-modules/workspace-invitation/utils/cast-app-token-to-workspace-invitation.util';
 import {
   WorkspaceInvitationException,
   WorkspaceInvitationExceptionCode,
 } from 'src/engine/core-modules/workspace-invitation/workspace-invitation.exception';
-import { Workspace } from 'src/engine/core-modules/workspace/workspace.entity';
+import { WorkspaceEntity } from 'src/engine/core-modules/workspace/workspace.entity';
 import { WorkspaceMemberWorkspaceEntity } from 'src/modules/workspace-member/standard-objects/workspace-member.workspace-entity';
 
 @Injectable()
-// eslint-disable-next-line @nx/workspace-inject-workspace-repository
 export class WorkspaceInvitationService {
   constructor(
-    @InjectRepository(AppToken, 'core')
-    private readonly appTokenRepository: Repository<AppToken>,
-    @InjectRepository(UserWorkspace, 'core')
-    private readonly userWorkspaceRepository: Repository<UserWorkspace>,
+    @InjectRepository(AppTokenEntity)
+    private readonly appTokenRepository: Repository<AppTokenEntity>,
+    @InjectRepository(UserWorkspaceEntity)
+    private readonly userWorkspaceRepository: Repository<UserWorkspaceEntity>,
     private readonly twentyConfigService: TwentyConfigService,
     private readonly emailService: EmailService,
     private readonly onboardingService: OnboardingService,
-    private readonly domainManagerService: DomainManagerService,
+    private readonly workspaceDomainsService: WorkspaceDomainsService,
+    private readonly i18nService: I18nService,
+    private readonly fileService: FileService,
+    private readonly throttlerService: ThrottlerService,
   ) {}
 
   async validatePersonalInvitation({
@@ -131,7 +137,7 @@ export class WorkspaceInvitationService {
     return appToken;
   }
 
-  async loadWorkspaceInvitations(workspace: Workspace) {
+  async loadWorkspaceInvitations(workspace: WorkspaceEntity) {
     const appTokens = await this.appTokenRepository.find({
       where: {
         workspaceId: workspace.id,
@@ -146,7 +152,7 @@ export class WorkspaceInvitationService {
     return appTokens.map(castAppTokenToWorkspaceInvitationUtil);
   }
 
-  async createWorkspaceInvitation(email: string, workspace: Workspace) {
+  async createWorkspaceInvitation(email: string, workspace: WorkspaceEntity) {
     const maybeWorkspaceInvitation = await this.getOneWorkspaceInvitation(
       workspace.id,
       email.toLowerCase(),
@@ -202,14 +208,16 @@ export class WorkspaceInvitationService {
   async invalidateWorkspaceInvitation(workspaceId: string, email: string) {
     const appToken = await this.getOneWorkspaceInvitation(workspaceId, email);
 
-    if (appToken) {
-      await this.appTokenRepository.delete(appToken.id);
+    if (!isDefined(appToken)) {
+      return;
     }
+
+    await this.appTokenRepository.delete(appToken.id);
   }
 
   async resendWorkspaceInvitation(
     appTokenId: string,
-    workspace: Workspace,
+    workspace: WorkspaceEntity,
     sender: WorkspaceMemberWorkspaceEntity,
   ) {
     const appToken = await this.appTokenRepository.findOne({
@@ -234,7 +242,7 @@ export class WorkspaceInvitationService {
 
   async sendInvitations(
     emails: string[],
-    workspace: Workspace,
+    workspace: WorkspaceEntity,
     sender: WorkspaceMemberWorkspaceEntity,
     usePersonalInvitation = true,
   ): Promise<SendInvitationsOutput> {
@@ -245,6 +253,8 @@ export class WorkspaceInvitationService {
         result: [],
       };
     }
+
+    await this.throttleInvitationSending(workspace.id, emails);
 
     const invitationsPr = await Promise.allSettled(
       emails.map(async (email) => {
@@ -277,9 +287,11 @@ export class WorkspaceInvitationService {
 
     for (const invitation of invitationsPr) {
       if (invitation.status === 'fulfilled') {
-        const link = this.domainManagerService.buildWorkspaceURL({
+        const link = this.workspaceDomainsService.buildWorkspaceURL({
           workspace,
-          pathname: `invite/${workspace?.inviteHash}`,
+          pathname: getAppPath(AppPath.Invite, {
+            workspaceInviteHash: workspace?.inviteHash,
+          }),
           searchParams: invitation.value.isPersonalInvitation
             ? {
                 inviteToken: invitation.value.appToken.value,
@@ -288,9 +300,24 @@ export class WorkspaceInvitationService {
             : {},
         });
 
+        if (!isDefined(sender.userEmail)) {
+          throw new WorkspaceInvitationException(
+            'Sender email is missing',
+            WorkspaceInvitationExceptionCode.EMAIL_MISSING,
+          );
+        }
+
         const emailData = {
           link: link.toString(),
-          workspace: { name: workspace.displayName, logo: workspace.logo },
+          workspace: {
+            name: workspace.displayName,
+            logo: workspace.logo
+              ? this.fileService.signFileUrl({
+                  url: workspace.logo,
+                  workspaceId: workspace.id,
+                })
+              : workspace.logo,
+          },
           sender: {
             email: sender.userEmail,
             firstName: sender.name.firstName,
@@ -306,12 +333,14 @@ export class WorkspaceInvitationService {
           plainText: true,
         });
 
-        i18n.activate(sender.locale);
+        const joinTeamMsg = msg`Join your team on Twenty`;
+        const i18n = this.i18nService.getI18nInstance(sender.locale);
+        const subject = i18n._(joinTeamMsg);
 
         await this.emailService.send({
           from: `${sender.name.firstName} ${sender.name.lastName} (via Twenty) <${this.twentyConfigService.get('EMAIL_FROM_ADDRESS')}>`,
           to: invitation.value.email,
-          subject: t`Join your team on Twenty`,
+          subject,
           text,
           html,
         });
@@ -385,5 +414,48 @@ export class WorkspaceInvitationService {
     });
 
     return this.appTokenRepository.save(invitationToken);
+  }
+
+  private async throttleInvitationSending(
+    workspaceId: string,
+    emails: string[],
+  ) {
+    try {
+      //limit invitation sending for specific invite emails
+      await Promise.all(
+        emails.map(async (email) => {
+          await this.throttlerService.tokenBucketThrottleOrThrow(
+            `invitation-resending-workspace:throttler:${email}`,
+            1,
+            this.twentyConfigService.get(
+              'INVITATION_SENDING_BY_EMAIL_THROTTLE_LIMIT',
+            ),
+            this.twentyConfigService.get(
+              'INVITATION_SENDING_BY_EMAIL_THROTTLE_TTL_IN_MS',
+            ),
+          );
+        }),
+      );
+
+      //limit invitation sending for a specific workspace
+      await this.throttlerService.tokenBucketThrottleOrThrow(
+        `invitation-resending-workspace:throttler:${workspaceId}`,
+        emails.length,
+        this.twentyConfigService.get(
+          'INVITATION_SENDING_BY_WORKSPACE_THROTTLE_LIMIT',
+        ),
+        this.twentyConfigService.get(
+          'INVITATION_SENDING_BY_WORKSPACE_THROTTLE_TTL_IN_MS',
+        ),
+      );
+    } catch {
+      throw new WorkspaceInvitationException(
+        'Workspace invitation sending rate limit exceeded.',
+        WorkspaceInvitationExceptionCode.INVALID_INVITATION,
+        {
+          userFriendlyMessage: msg`Too many workspace invitations sent. Please try again later.`,
+        },
+      );
+    }
   }
 }

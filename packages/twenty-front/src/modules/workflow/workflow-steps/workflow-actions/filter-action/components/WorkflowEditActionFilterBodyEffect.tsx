@@ -1,24 +1,35 @@
-import { useRecoilComponentFamilyStateV2 } from '@/ui/utilities/state/component-state/hooks/useRecoilComponentFamilyStateV2';
-import { useSetRecoilComponentStateV2 } from '@/ui/utilities/state/component-state/hooks/useSetRecoilComponentStateV2';
-import { FilterSettings } from '@/workflow/workflow-steps/workflow-actions/filter-action/components/WorkflowEditActionFilter';
+import { useRecoilComponentFamilyState } from '@/ui/utilities/state/component-state/hooks/useRecoilComponentFamilyState';
+import { useSetRecoilComponentState } from '@/ui/utilities/state/component-state/hooks/useSetRecoilComponentState';
 import { currentStepFilterGroupsComponentState } from '@/workflow/workflow-steps/workflow-actions/filter-action/states/currentStepFilterGroupsComponentState';
 import { currentStepFiltersComponentState } from '@/workflow/workflow-steps/workflow-actions/filter-action/states/currentStepFiltersComponentState';
 import { hasInitializedCurrentStepFilterGroupsComponentFamilyState } from '@/workflow/workflow-steps/workflow-actions/filter-action/states/hasInitializedCurrentStepFilterGroupsComponentFamilyState';
 import { hasInitializedCurrentStepFiltersComponentFamilyState } from '@/workflow/workflow-steps/workflow-actions/filter-action/states/hasInitializedCurrentStepFiltersComponentFamilyState';
-import { useEffect } from 'react';
-import { isDefined } from 'twenty-shared/utils';
+import { useEffect, useMemo } from 'react';
+import {
+  type StepFilterGroup,
+  type StepFilterWithPotentiallyDeprecatedOperand,
+} from 'twenty-shared/types';
+import {
+  convertViewFilterOperandToCoreOperand,
+  isDefined,
+} from 'twenty-shared/utils';
+
+type FilterSettingsWithPotentiallyDeprecatedOperand = {
+  stepFilterGroups?: StepFilterGroup[];
+  stepFilters?: StepFilterWithPotentiallyDeprecatedOperand[];
+};
 
 export const WorkflowEditActionFilterBodyEffect = ({
   stepId,
   defaultValue,
 }: {
   stepId: string;
-  defaultValue?: FilterSettings;
+  defaultValue?: FilterSettingsWithPotentiallyDeprecatedOperand;
 }) => {
   const [
     hasInitializedCurrentStepFilters,
     setHasInitializedCurrentStepFilters,
-  ] = useRecoilComponentFamilyStateV2(
+  ] = useRecoilComponentFamilyState(
     hasInitializedCurrentStepFiltersComponentFamilyState,
     { stepId },
   );
@@ -26,32 +37,36 @@ export const WorkflowEditActionFilterBodyEffect = ({
   const [
     hasInitializedCurrentStepFilterGroups,
     setHasInitializedCurrentStepFilterGroups,
-  ] = useRecoilComponentFamilyStateV2(
+  ] = useRecoilComponentFamilyState(
     hasInitializedCurrentStepFilterGroupsComponentFamilyState,
     { stepId },
   );
 
-  const setCurrentStepFilters = useSetRecoilComponentStateV2(
+  const setCurrentStepFilters = useSetRecoilComponentState(
     currentStepFiltersComponentState,
   );
 
-  const setCurrentStepFilterGroups = useSetRecoilComponentStateV2(
+  const setCurrentStepFilterGroups = useSetRecoilComponentState(
     currentStepFilterGroupsComponentState,
   );
 
+  const stepFiltersConverted = useMemo(() => {
+    return defaultValue?.stepFilters?.map((filter) => ({
+      ...filter,
+      operand: convertViewFilterOperandToCoreOperand(filter.operand),
+    }));
+  }, [defaultValue?.stepFilters]);
+
   useEffect(() => {
-    if (
-      !hasInitializedCurrentStepFilters &&
-      isDefined(defaultValue?.stepFilters)
-    ) {
-      setCurrentStepFilters(defaultValue.stepFilters ?? []);
+    if (!hasInitializedCurrentStepFilters && isDefined(stepFiltersConverted)) {
+      setCurrentStepFilters(stepFiltersConverted ?? []);
       setHasInitializedCurrentStepFilters(true);
     }
   }, [
     setCurrentStepFilters,
     hasInitializedCurrentStepFilters,
     setHasInitializedCurrentStepFilters,
-    defaultValue?.stepFilters,
+    stepFiltersConverted,
   ]);
 
   useEffect(() => {

@@ -1,55 +1,51 @@
 import { useCommandMenu } from '@/command-menu/hooks/useCommandMenu';
-import { CoreObjectNameSingular } from '@/object-metadata/types/CoreObjectNameSingular';
-import { useUpdateOneRecord } from '@/object-record/hooks/useUpdateOneRecord';
-import { useDeleteWorkflowVersionStep } from '@/workflow/hooks/useDeleteWorkflowVersionStep';
-import { useGetUpdatableWorkflowVersion } from '@/workflow/hooks/useGetUpdatableWorkflowVersion';
+import { useRecoilComponentValue } from '@/ui/utilities/state/component-state/hooks/useRecoilComponentValue';
+import { useGetUpdatableWorkflowVersionOrThrow } from '@/workflow/hooks/useGetUpdatableWorkflowVersionOrThrow';
 import { useStepsOutputSchema } from '@/workflow/hooks/useStepsOutputSchema';
-import {
-  WorkflowVersion,
-  WorkflowWithCurrentVersion,
-} from '@/workflow/types/Workflow';
-import { assertWorkflowWithCurrentVersionIsDefined } from '@/workflow/utils/assertWorkflowWithCurrentVersionIsDefined';
-import { TRIGGER_STEP_ID } from '@/workflow/workflow-trigger/constants/TriggerStepId';
+import { useWorkflowWithCurrentVersion } from '@/workflow/hooks/useWorkflowWithCurrentVersion';
+import { workflowVisualizerWorkflowIdComponentState } from '@/workflow/states/workflowVisualizerWorkflowIdComponentState';
+import { useDeleteWorkflowVersionStep } from '@/workflow/workflow-steps/hooks/useDeleteWorkflowVersionStep';
+import { useResetWorkflowAiAgentPermissionsStateOnCommandMenuClose } from '@/workflow/workflow-steps/workflow-actions/ai-agent-action/hooks/useResetWorkflowAiAgentPermissionsStateOnCommandMenuClose';
+import { isDefined } from 'twenty-shared/utils';
 
-export const useDeleteStep = ({
-  workflow,
-}: {
-  workflow: WorkflowWithCurrentVersion | undefined;
-}) => {
+export const useDeleteStep = () => {
+  const { resetPermissionState } =
+    useResetWorkflowAiAgentPermissionsStateOnCommandMenuClose();
   const { deleteWorkflowVersionStep } = useDeleteWorkflowVersionStep();
-  const { updateOneRecord: updateOneWorkflowVersion } =
-    useUpdateOneRecord<WorkflowVersion>({
-      objectNameSingular: CoreObjectNameSingular.WorkflowVersion,
-    });
-  const { deleteStepOutputSchema } = useStepsOutputSchema();
+  const { deleteStepsOutputSchema } = useStepsOutputSchema();
 
-  const { getUpdatableWorkflowVersion } = useGetUpdatableWorkflowVersion();
+  const { getUpdatableWorkflowVersion } =
+    useGetUpdatableWorkflowVersionOrThrow();
   const { closeCommandMenu } = useCommandMenu();
+  const workflowVisualizerWorkflowId = useRecoilComponentValue(
+    workflowVisualizerWorkflowIdComponentState,
+  );
+  const workflow = useWorkflowWithCurrentVersion(workflowVisualizerWorkflowId);
 
   const deleteStep = async (stepId: string) => {
-    assertWorkflowWithCurrentVersionIsDefined(workflow);
+    const workflowVersionId = await getUpdatableWorkflowVersion();
+
+    const isAiAgentStep =
+      isDefined(workflow?.currentVersion?.steps) &&
+      workflow.currentVersion.steps.some(
+        (step) => step.id === stepId && step.type === 'AI_AGENT',
+      );
+
+    await deleteWorkflowVersionStep({
+      workflowVersionId,
+      stepId,
+    });
 
     closeCommandMenu();
 
-    const workflowVersionId = await getUpdatableWorkflowVersion(workflow);
-
-    if (stepId === TRIGGER_STEP_ID) {
-      await updateOneWorkflowVersion({
-        idToUpdate: workflowVersionId,
-        updateOneRecordInput: {
-          trigger: null,
-        },
-      });
-    } else {
-      await deleteWorkflowVersionStep({
-        workflowVersionId,
-        stepId,
-      });
-    }
-    deleteStepOutputSchema({
-      stepId,
+    deleteStepsOutputSchema({
+      stepIds: [stepId],
       workflowVersionId,
     });
+
+    if (isAiAgentStep) {
+      resetPermissionState();
+    }
   };
 
   return {

@@ -1,5 +1,5 @@
-import { WorkflowActionType } from '@/workflow/types/Workflow';
-import { Theme } from '@emotion/react';
+import { type WorkflowActionType } from '@/workflow/types/Workflow';
+import { type Theme } from '@emotion/react';
 import { assertUnreachable } from 'twenty-shared/utils';
 
 export const getActionIconColorOrThrow = ({
@@ -12,16 +12,21 @@ export const getActionIconColorOrThrow = ({
   switch (actionType) {
     case 'CODE':
     case 'HTTP_REQUEST':
-      return theme.color.orange;
+    case 'SEND_EMAIL':
+      return theme.color.red;
     case 'CREATE_RECORD':
     case 'UPDATE_RECORD':
     case 'DELETE_RECORD':
+    case 'UPSERT_RECORD':
     case 'FIND_RECORDS':
-    case 'FORM':
-    case 'FILTER':
       return theme.font.color.tertiary;
-    case 'SEND_EMAIL':
-      return theme.color.blue;
+    case 'FORM':
+      return theme.color.orange;
+    case 'ITERATOR':
+    case 'EMPTY':
+    case 'FILTER':
+    case 'DELAY':
+      return theme.color.green12;
     case 'AI_AGENT':
       return theme.color.pink;
     default:

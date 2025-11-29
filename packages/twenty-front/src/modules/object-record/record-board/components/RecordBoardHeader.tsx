@@ -1,6 +1,8 @@
 import { RecordBoardColumnHeaderWrapper } from '@/object-record/record-board/record-board-column/components/RecordBoardColumnHeaderWrapper';
+import { RecordGroupContext } from '@/object-record/record-group/states/context/RecordGroupContext';
 import { visibleRecordGroupIdsComponentFamilySelector } from '@/object-record/record-group/states/selectors/visibleRecordGroupIdsComponentFamilySelector';
-import { useRecoilComponentFamilyValueV2 } from '@/ui/utilities/state/component-state/hooks/useRecoilComponentFamilyValueV2';
+import { RecordIndexGroupAggregatesDataLoader } from '@/object-record/record-index/components/RecordIndexGroupAggregatesDataLoader';
+import { useRecoilComponentFamilyValue } from '@/ui/utilities/state/component-state/hooks/useRecoilComponentFamilyValue';
 import { ViewType } from '@/views/types/ViewType';
 import styled from '@emotion/styled';
 
@@ -24,7 +26,7 @@ const StyledHeaderContainer = styled.div`
 `;
 
 export const RecordBoardHeader = () => {
-  const visibleRecordGroupIds = useRecoilComponentFamilyValueV2(
+  const visibleRecordGroupIds = useRecoilComponentFamilyValue(
     visibleRecordGroupIdsComponentFamilySelector,
     ViewType.Kanban,
   );
@@ -32,12 +34,17 @@ export const RecordBoardHeader = () => {
   return (
     <StyledHeaderContainer id="record-board-header">
       {visibleRecordGroupIds.map((recordGroupId, index) => (
-        <RecordBoardColumnHeaderWrapper
-          columnId={recordGroupId}
-          columnIndex={index}
+        <RecordGroupContext.Provider
           key={recordGroupId}
-        />
+          value={{ recordGroupId }}
+        >
+          <RecordBoardColumnHeaderWrapper
+            columnId={recordGroupId}
+            columnIndex={index}
+          />
+        </RecordGroupContext.Provider>
       ))}
+      <RecordIndexGroupAggregatesDataLoader />
     </StyledHeaderContainer>
   );
 };

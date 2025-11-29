@@ -6,23 +6,24 @@ import { useRecoilValue } from 'recoil';
 import { currentWorkspaceMemberState } from '@/auth/states/currentWorkspaceMemberState';
 import { useSnackBar } from '@/ui/feedback/snack-bar-manager/hooks/useSnackBar';
 
-import { SettingsPath } from '@/types/SettingsPath';
 import { t } from '@lingui/core/macro';
+import { SettingsPath } from 'twenty-shared/types';
 import {
-  ConnectionParameters,
+  type ConnectionParameters,
   useSaveImapSmtpCaldavAccountMutation,
 } from '~/generated-metadata/graphql';
 import { useNavigateSettings } from '~/hooks/useNavigateSettings';
 
-import { ImapSmtpCaldavAccount } from '@/accounts/types/ImapSmtpCaldavAccount';
+import { type ImapSmtpCaldavAccount } from '@/accounts/types/ImapSmtpCaldavAccount';
 import { ACCOUNT_PROTOCOLS } from '@/settings/accounts/constants/AccountProtocols';
 import {
   connectionImapSmtpCalDav,
   isProtocolConfigured,
 } from '@/settings/accounts/validation-schemas/connectionImapSmtpCalDav';
+import { ApolloError } from '@apollo/client';
 import { isDefined } from 'twenty-shared/utils';
 import {
-  ConnectedImapSmtpCaldavAccount,
+  type ConnectedImapSmtpCaldavAccount,
   useConnectedImapSmtpCaldavAccount,
 } from './useConnectedImapSmtpCaldavAccount';
 
@@ -48,7 +49,7 @@ export const useImapSmtpCaldavConnectionForm = ({
     defaultValues: {
       handle: '',
       IMAP: { host: '', port: 993, password: '', secure: true },
-      SMTP: { host: '', port: 587, password: '', secure: true },
+      SMTP: { host: '', username: '', port: 587, password: '', secure: true },
       CALDAV: {
         host: '',
         port: 443,
@@ -131,7 +132,7 @@ export const useImapSmtpCaldavConnectionForm = ({
       });
 
       try {
-        await saveConnection({
+        const { data } = await saveConnection({
           variables: {
             ...(isEditing && connectedAccountId
               ? { id: connectedAccountId }
@@ -141,20 +142,24 @@ export const useImapSmtpCaldavConnectionForm = ({
             connectionParameters,
           },
         });
+        if (!isDefined(data)) return;
 
         const successMessage = isEditing
           ? t`Connection successfully updated`
           : t`Connection successfully created`;
 
         enqueueSuccessSnackBar({ message: successMessage });
-        navigate(SettingsPath.Accounts);
-      } catch (error) {
-        const errorMessage =
-          error instanceof Error
-            ? error.message
-            : 'An unexpected error occurred';
 
-        enqueueErrorSnackBar({ message: errorMessage });
+        const { connectedAccountId: returnedConnectedAccountId } =
+          data?.saveImapSmtpCaldavAccount || {};
+
+        navigate(SettingsPath.AccountsConfiguration, {
+          connectedAccountId: returnedConnectedAccountId,
+        });
+      } catch (error) {
+        enqueueErrorSnackBar({
+          apolloError: error instanceof ApolloError ? error : undefined,
+        });
       }
     },
     [

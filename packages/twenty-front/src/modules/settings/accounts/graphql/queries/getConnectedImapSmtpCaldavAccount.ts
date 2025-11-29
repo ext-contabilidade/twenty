@@ -1,7 +1,7 @@
 import gql from 'graphql-tag';
 
 export const GET_CONNECTED_IMAP_SMTP_CALDAV_ACCOUNT = gql`
-  query GetConnectedImapSmtpCaldavAccount($id: String!) {
+  query GetConnectedImapSmtpCaldavAccount($id: UUID!) {
     getConnectedImapSmtpCaldavAccount(id: $id) {
       id
       handle
@@ -16,6 +16,7 @@ export const GET_CONNECTED_IMAP_SMTP_CALDAV_ACCOUNT = gql`
         }
         SMTP {
           host
+          username
           port
           secure
           password

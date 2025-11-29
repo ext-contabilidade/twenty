@@ -1,12 +1,12 @@
 import { NestFactory } from '@nestjs/core';
-import { NestExpressApplication } from '@nestjs/platform-express';
+import { type NestExpressApplication } from '@nestjs/platform-express';
 
 import fs from 'fs';
 
 import bytes from 'bytes';
 import { useContainer } from 'class-validator';
 import session from 'express-session';
-import { graphqlUploadExpress } from 'graphql-upload';
+import graphqlUploadExpress from 'graphql-upload/graphqlUploadExpress.mjs';
 
 import { NodeEnvironment } from 'src/engine/core-modules/twenty-config/interfaces/node-environment.interface';
 

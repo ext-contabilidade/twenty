@@ -1,20 +1,23 @@
-import { i18n } from '@lingui/core';
+import { type I18n } from '@lingui/core';
 import { SOURCE_LOCALE } from 'twenty-shared/translations';
 
 import { generateMessageId } from 'src/engine/core-modules/i18n/utils/generateMessageId';
 import { resolveFieldMetadataStandardOverride } from 'src/engine/metadata-modules/field-metadata/utils/resolve-field-metadata-standard-override.util';
 
-jest.mock('@lingui/core');
 jest.mock('src/engine/core-modules/i18n/utils/generateMessageId');
 
-const mockI18n = i18n as jest.Mocked<typeof i18n>;
 const mockGenerateMessageId = generateMessageId as jest.MockedFunction<
   typeof generateMessageId
 >;
 
 describe('resolveFieldMetadataStandardOverride', () => {
+  let mockI18n: jest.Mocked<I18n>;
+
   beforeEach(() => {
     jest.clearAllMocks();
+    mockI18n = {
+      _: jest.fn(),
+    } as unknown as jest.Mocked<I18n>;
   });
 
   describe('Custom fields', () => {
@@ -31,6 +34,7 @@ describe('resolveFieldMetadataStandardOverride', () => {
         fieldMetadata,
         'label',
         'fr-FR',
+        mockI18n,
       );
 
       expect(result).toBe('Custom Label');
@@ -49,6 +53,7 @@ describe('resolveFieldMetadataStandardOverride', () => {
         fieldMetadata,
         'description',
         undefined,
+        mockI18n,
       );
 
       expect(result).toBe('Custom Description');
@@ -67,6 +72,7 @@ describe('resolveFieldMetadataStandardOverride', () => {
         fieldMetadata,
         'icon',
         SOURCE_LOCALE,
+        mockI18n,
       );
 
       expect(result).toBe('custom-icon');
@@ -89,6 +95,7 @@ describe('resolveFieldMetadataStandardOverride', () => {
         fieldMetadata,
         'icon',
         'fr-FR',
+        mockI18n,
       );
 
       expect(result).toBe('override-icon');
@@ -113,13 +120,19 @@ describe('resolveFieldMetadataStandardOverride', () => {
       };
 
       expect(
-        resolveFieldMetadataStandardOverride(fieldMetadata, 'label', 'fr-FR'),
+        resolveFieldMetadataStandardOverride(
+          fieldMetadata,
+          'label',
+          'fr-FR',
+          mockI18n,
+        ),
       ).toBe('Libellé traduit');
       expect(
         resolveFieldMetadataStandardOverride(
           fieldMetadata,
           'description',
           'fr-FR',
+          mockI18n,
         ),
       ).toBe('Description traduite');
     });
@@ -146,6 +159,7 @@ describe('resolveFieldMetadataStandardOverride', () => {
         fieldMetadata,
         'label',
         'fr-FR',
+        mockI18n,
       );
 
       expect(result).toBe('Standard Label');
@@ -173,6 +187,7 @@ describe('resolveFieldMetadataStandardOverride', () => {
         fieldMetadata,
         'description',
         'fr-FR',
+        mockI18n,
       );
 
       expect(result).toBe('Standard Description');
@@ -200,6 +215,7 @@ describe('resolveFieldMetadataStandardOverride', () => {
         fieldMetadata,
         'label',
         undefined,
+        mockI18n,
       );
 
       expect(result).toBe('Standard Label');
@@ -225,6 +241,7 @@ describe('resolveFieldMetadataStandardOverride', () => {
           fieldMetadata,
           'label',
           SOURCE_LOCALE,
+          mockI18n,
         ),
       ).toBe('Overridden Label');
       expect(
@@ -232,6 +249,7 @@ describe('resolveFieldMetadataStandardOverride', () => {
           fieldMetadata,
           'description',
           SOURCE_LOCALE,
+          mockI18n,
         ),
       ).toBe('Overridden Description');
       expect(
@@ -239,6 +257,7 @@ describe('resolveFieldMetadataStandardOverride', () => {
           fieldMetadata,
           'icon',
           SOURCE_LOCALE,
+          mockI18n,
         ),
       ).toBe('overridden-icon');
     });
@@ -261,6 +280,7 @@ describe('resolveFieldMetadataStandardOverride', () => {
         fieldMetadata,
         'label',
         'fr-FR',
+        mockI18n,
       );
 
       expect(result).toBe('Standard Label');
@@ -284,6 +304,7 @@ describe('resolveFieldMetadataStandardOverride', () => {
         fieldMetadata,
         'label',
         SOURCE_LOCALE,
+        mockI18n,
       );
 
       expect(result).toBe('Standard Label');
@@ -307,6 +328,7 @@ describe('resolveFieldMetadataStandardOverride', () => {
         fieldMetadata,
         'label',
         SOURCE_LOCALE,
+        mockI18n,
       );
 
       expect(result).toBe('Standard Label');
@@ -330,6 +352,7 @@ describe('resolveFieldMetadataStandardOverride', () => {
         fieldMetadata,
         'label',
         'fr-FR',
+        mockI18n,
       );
 
       expect(mockGenerateMessageId).toHaveBeenCalledWith('Standard Label');
@@ -355,6 +378,7 @@ describe('resolveFieldMetadataStandardOverride', () => {
         fieldMetadata,
         'label',
         'fr-FR',
+        mockI18n,
       );
 
       expect(result).toBe('Standard Label');
@@ -382,6 +406,7 @@ describe('resolveFieldMetadataStandardOverride', () => {
         fieldMetadata,
         'label',
         'fr-FR',
+        mockI18n,
       );
 
       expect(result).toBe('Translation Override');
@@ -404,6 +429,7 @@ describe('resolveFieldMetadataStandardOverride', () => {
         fieldMetadata,
         'label',
         SOURCE_LOCALE,
+        mockI18n,
       );
 
       expect(result).toBe('Source Override');
@@ -427,6 +453,7 @@ describe('resolveFieldMetadataStandardOverride', () => {
         fieldMetadata,
         'label',
         'de-DE',
+        mockI18n,
       );
 
       expect(result).toBe('Auto Translated Label');

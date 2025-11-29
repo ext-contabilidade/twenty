@@ -1,33 +1,33 @@
 import { Injectable } from '@nestjs/common';
 
-import { Request, Response } from 'express';
-import { APP_LOCALES, SOURCE_LOCALE } from 'twenty-shared/translations';
+import { type Request, type Response } from 'express';
+import { type APP_LOCALES, SOURCE_LOCALE } from 'twenty-shared/translations';
 import { isDefined } from 'twenty-shared/utils';
 
 import { AuthException } from 'src/engine/core-modules/auth/auth.exception';
 import { AuthGraphqlApiExceptionFilter } from 'src/engine/core-modules/auth/filters/auth-graphql-api-exception.filter';
 import { AccessTokenService } from 'src/engine/core-modules/auth/token/services/access-token.service';
-import { AuthContext } from 'src/engine/core-modules/auth/types/auth-context.type';
+import { type AuthContext } from 'src/engine/core-modules/auth/types/auth-context.type';
 import { getAuthExceptionRestStatus } from 'src/engine/core-modules/auth/utils/get-auth-exception-rest-status.util';
 import { ExceptionHandlerService } from 'src/engine/core-modules/exception-handler/exception-handler.service';
 import { ErrorCode } from 'src/engine/core-modules/graphql/utils/graphql-errors.util';
 import { JwtWrapperService } from 'src/engine/core-modules/jwt/services/jwt-wrapper.service';
 import { DataSourceService } from 'src/engine/metadata-modules/data-source/data-source.service';
-import { WorkspaceMetadataCacheService } from 'src/engine/metadata-modules/workspace-metadata-cache/services/workspace-metadata-cache.service';
+import { WorkspaceManyOrAllFlatEntityMapsCacheService } from 'src/engine/metadata-modules/flat-entity/services/workspace-many-or-all-flat-entity-maps-cache.service';
 import { INTERNAL_SERVER_ERROR } from 'src/engine/middlewares/constants/default-error-message.constant';
 import {
   handleException,
   handleExceptionAndConvertToGraphQLError,
 } from 'src/engine/utils/global-exception-handler.util';
 import { WorkspaceCacheStorageService } from 'src/engine/workspace-cache-storage/workspace-cache-storage.service';
-import { CustomException } from 'src/utils/custom-exception';
+import { type CustomException } from 'src/utils/custom-exception';
 
 @Injectable()
 export class MiddlewareService {
   constructor(
     private readonly accessTokenService: AccessTokenService,
     private readonly workspaceStorageCacheService: WorkspaceCacheStorageService,
-    private readonly workspaceMetadataCacheService: WorkspaceMetadataCacheService,
+    private readonly flatEntityMapsCacheService: WorkspaceManyOrAllFlatEntityMapsCacheService,
     private readonly dataSourceService: DataSourceService,
     private readonly exceptionHandlerService: ExceptionHandlerService,
     private readonly jwtWrapperService: JwtWrapperService,
@@ -107,8 +107,13 @@ export class MiddlewareService {
       : undefined;
 
     if (metadataVersion === undefined && isDefined(data.workspace)) {
-      await this.workspaceMetadataCacheService.recomputeMetadataCache({
+      await this.flatEntityMapsCacheService.invalidateFlatEntityMaps({
         workspaceId: data.workspace.id,
+        flatMapsKeys: [
+          'flatObjectMetadataMaps',
+          'flatFieldMetadataMaps',
+          'flatIndexMaps',
+        ],
       });
       throw new Error('Metadata cache version not found');
     }
@@ -128,6 +133,10 @@ export class MiddlewareService {
 
   public async hydrateGraphqlRequest(request: Request) {
     if (!this.isTokenPresent(request)) {
+      request.locale =
+        (request.headers['x-locale'] as keyof typeof APP_LOCALES) ??
+        SOURCE_LOCALE;
+
       return;
     }
 
@@ -159,6 +168,7 @@ export class MiddlewareService {
     request.workspaceMemberId = data.workspaceMemberId;
     request.userWorkspaceId = data.userWorkspaceId;
     request.authProvider = data.authProvider;
+    request.impersonationContext = data.impersonationContext;
 
     request.locale =
       data.userWorkspace?.locale ??

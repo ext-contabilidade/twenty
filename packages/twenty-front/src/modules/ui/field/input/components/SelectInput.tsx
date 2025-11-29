@@ -1,6 +1,6 @@
 import { SelectInput as SelectBaseInput } from '@/ui/input/components/SelectInput';
 import { SelectableList } from '@/ui/layout/selectable-list/components/SelectableList';
-import { SelectOption } from 'twenty-ui/input';
+import { type SelectOption } from 'twenty-ui/input';
 
 type SelectInputProps = {
   selectableListComponentInstanceId: string;
@@ -14,6 +14,7 @@ type SelectInputProps = {
   onFilterChange?: ((filteredOptions: SelectOption[]) => void) | undefined;
   onClear?: (() => void) | undefined;
   clearLabel?: string;
+  onAddSelectOption?: (optionName: string) => void;
 };
 
 export const SelectInput = ({
@@ -27,6 +28,7 @@ export const SelectInput = ({
   onFilterChange,
   onClear,
   clearLabel,
+  onAddSelectOption,
 }: SelectInputProps) => {
   return (
     <SelectableList
@@ -43,6 +45,7 @@ export const SelectInput = ({
         onClear={onClear}
         clearLabel={clearLabel}
         focusId={focusId}
+        onAddSelectOption={onAddSelectOption}
       />
     </SelectableList>
   );

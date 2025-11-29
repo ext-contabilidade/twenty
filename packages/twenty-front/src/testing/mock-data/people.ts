@@ -1,8 +1,9 @@
-import { getRecordFromRecordNode } from '@/object-record/cache/utils/getRecordFromRecordNode';
-import { RecordGqlConnection } from '@/object-record/graphql/types/RecordGqlConnection';
-import { ObjectRecord } from '@/object-record/types/ObjectRecord';
-import { FieldMetadataType } from 'twenty-shared/types';
-import { generatedMockObjectMetadataItems } from '~/testing/mock-data/generatedMockObjectMetadataItems';
+import { getRecordsFromRecordConnection } from '@/object-record/cache/utils/getRecordsFromRecordConnection';
+import { type RecordGqlConnection } from '@/object-record/graphql/types/RecordGqlConnection';
+import { type ObjectRecord } from '@/object-record/types/ObjectRecord';
+
+import { type FieldMetadataType } from 'twenty-shared/types';
+import { getMockObjectMetadataItemOrThrow } from '~/testing/utils/getMockObjectMetadataItemOrThrow';
 
 export const peopleQueryResult = {
   people: {
@@ -1747,9 +1748,9 @@ export const peopleQueryResult = {
   },
 } satisfies { people: RecordGqlConnection };
 
-export const allMockPersonRecords = peopleQueryResult.people.edges.map((edge) =>
-  getRecordFromRecordNode({ recordNode: edge.node }),
-);
+export const allMockPersonRecords = getRecordsFromRecordConnection({
+  recordConnection: peopleQueryResult.people,
+}) as ObjectRecord[];
 
 export const getPeopleRecordConnectionMock = () => {
   const peopleMock = peopleQueryResult.people.edges.map((edge) => edge.node);
@@ -1758,13 +1759,7 @@ export const getPeopleRecordConnectionMock = () => {
 };
 
 export const getMockPersonObjectMetadataItem = () => {
-  const personObjectMetadataItem = generatedMockObjectMetadataItems.find(
-    (item) => item.nameSingular === 'person',
-  );
-
-  if (!personObjectMetadataItem) {
-    throw new Error('Person object metadata item not found');
-  }
+  const personObjectMetadataItem = getMockObjectMetadataItemOrThrow('person');
 
   return personObjectMetadataItem;
 };

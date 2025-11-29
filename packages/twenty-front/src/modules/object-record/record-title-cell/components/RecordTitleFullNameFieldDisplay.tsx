@@ -1,24 +1,23 @@
-import { FieldContext } from '@/object-record/record-field/contexts/FieldContext';
-import { useFullNameFieldDisplay } from '@/object-record/record-field/meta-types/hooks/useFullNameFieldDisplay';
-import { useInlineCell } from '@/object-record/record-inline-cell/hooks/useInlineCell';
+import { FieldContext } from '@/object-record/record-field/ui/contexts/FieldContext';
+import { useFullNameFieldDisplay } from '@/object-record/record-field/ui/meta-types/hooks/useFullNameFieldDisplay';
+import { useRecordTitleCell } from '@/object-record/record-title-cell/hooks/useRecordTitleCell';
 import { getRecordFieldInputInstanceId } from '@/object-record/utils/getRecordFieldInputId';
 import { usePushFocusItemToFocusStack } from '@/ui/utilities/focus/hooks/usePushFocusItemToFocusStack';
 import { FocusComponentType } from '@/ui/utilities/focus/types/FocusComponentType';
-import { Theme, withTheme } from '@emotion/react';
+import { withTheme, type Theme } from '@emotion/react';
 import styled from '@emotion/styled';
 import { isNonEmptyString } from '@sniptt/guards';
 import { useContext } from 'react';
 import { OverflowingTextWithTooltip } from 'twenty-ui/display';
 
 const StyledDiv = styled.div`
-  align-items: center;
   background: inherit;
   border: none;
   border-radius: ${({ theme }) => theme.border.radius.sm};
   color: ${({ theme }) => theme.font.color.primary};
   cursor: pointer;
   overflow: hidden;
-  height: 28px;
+  height: 24px;
   padding: ${({ theme }) => theme.spacing(0, 1.25)};
   box-sizing: border-box;
   display: flex;
@@ -40,7 +39,7 @@ export const RecordTitleFullNameFieldDisplay = ({
 }) => {
   const { recordId, fieldDefinition } = useContext(FieldContext);
 
-  const { openInlineCell } = useInlineCell();
+  const { openRecordTitleCell } = useRecordTitleCell();
 
   const { fieldValue } = useFullNameFieldDisplay();
 
@@ -71,7 +70,15 @@ export const RecordTitleFullNameFieldDisplay = ({
           },
         });
 
-        openInlineCell();
+        openRecordTitleCell({
+          recordId,
+          fieldName: fieldDefinition.metadata.fieldName,
+          instanceId: getRecordFieldInputInstanceId({
+            recordId,
+            fieldName: fieldDefinition.metadata.fieldName,
+            prefix: containerType,
+          }),
+        });
       }}
     >
       {!content ? (

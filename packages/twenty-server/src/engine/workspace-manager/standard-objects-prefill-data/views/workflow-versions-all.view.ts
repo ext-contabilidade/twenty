@@ -1,14 +1,26 @@
-import { ObjectMetadataEntity } from 'src/engine/metadata-modules/object-metadata/object-metadata.entity';
+import { msg } from '@lingui/core/macro';
+import { STANDARD_OBJECT_IDS } from 'twenty-shared/metadata';
+import { v4 } from 'uuid';
+
+import { STANDARD_OBJECTS } from 'src/engine/core-modules/application/constants/standard-object.constant';
+import { type FlatApplication } from 'src/engine/core-modules/application/types/flat-application.type';
+import { type ObjectMetadataEntity } from 'src/engine/metadata-modules/object-metadata/object-metadata.entity';
+import { ViewOpenRecordInType } from 'src/engine/metadata-modules/view/types/view-open-record-in-type.type';
+import { type ViewDefinition } from 'src/engine/workspace-manager/standard-objects-prefill-data/types/view-definition.interface';
 import {
   BASE_OBJECT_STANDARD_FIELD_IDS,
   WORKFLOW_VERSION_STANDARD_FIELD_IDS,
 } from 'src/engine/workspace-manager/workspace-sync-metadata/constants/standard-field-ids';
-import { STANDARD_OBJECT_IDS } from 'src/engine/workspace-manager/workspace-sync-metadata/constants/standard-object-ids';
-import { ViewOpenRecordInType } from 'src/modules/view/standard-objects/view.workspace-entity';
 
-export const workflowVersionsAllView = (
-  objectMetadataItems: ObjectMetadataEntity[],
-) => {
+export const workflowVersionsAllView = ({
+  objectMetadataItems,
+  useCoreNaming = false,
+  twentyStandardFlatApplication,
+}: {
+  objectMetadataItems: ObjectMetadataEntity[];
+  useCoreNaming?: boolean;
+  twentyStandardFlatApplication: FlatApplication;
+}): ViewDefinition => {
   const workflowVersionObjectMetadata = objectMetadataItems.find(
     (object) => object.standardId === STANDARD_OBJECT_IDS.workflowVersion,
   );
@@ -17,8 +29,17 @@ export const workflowVersionsAllView = (
     throw new Error('Workflow version object metadata not found');
   }
 
+  const viewUniversalIdentifier =
+    STANDARD_OBJECTS.workflowVersion.views.allWorkflowVersions
+      .universalIdentifier;
+
   return {
-    name: 'All Workflow Versions',
+    id: v4(),
+    universalIdentifier: viewUniversalIdentifier,
+    applicationId: twentyStandardFlatApplication.id,
+    name: useCoreNaming
+      ? msg`All {objectLabelPlural}`
+      : 'All Workflow Versions',
     objectMetadataId: workflowVersionObjectMetadata.id,
     type: 'table',
     key: 'INDEX',
@@ -37,6 +58,9 @@ export const workflowVersionsAllView = (
         position: 0,
         isVisible: true,
         size: 210,
+        universalIdentifier:
+          STANDARD_OBJECTS.workflowVersion.views.allWorkflowVersions.viewFields
+            .name.universalIdentifier,
       },
       {
         fieldMetadataId:
@@ -47,6 +71,9 @@ export const workflowVersionsAllView = (
         position: 1,
         isVisible: true,
         size: 150,
+        universalIdentifier:
+          STANDARD_OBJECTS.workflowVersion.views.allWorkflowVersions.viewFields
+            .workflow.universalIdentifier,
       },
       {
         fieldMetadataId:
@@ -57,6 +84,9 @@ export const workflowVersionsAllView = (
         position: 2,
         isVisible: true,
         size: 150,
+        universalIdentifier:
+          STANDARD_OBJECTS.workflowVersion.views.allWorkflowVersions.viewFields
+            .status.universalIdentifier,
       },
       {
         fieldMetadataId:
@@ -67,6 +97,9 @@ export const workflowVersionsAllView = (
         position: 3,
         isVisible: true,
         size: 150,
+        universalIdentifier:
+          STANDARD_OBJECTS.workflowVersion.views.allWorkflowVersions.viewFields
+            .updatedAt.universalIdentifier,
       },
       {
         fieldMetadataId:
@@ -77,6 +110,9 @@ export const workflowVersionsAllView = (
         position: 4,
         isVisible: false,
         size: 150,
+        universalIdentifier:
+          STANDARD_OBJECTS.workflowVersion.views.allWorkflowVersions.viewFields
+            .runs.universalIdentifier,
       },
     ],
   };

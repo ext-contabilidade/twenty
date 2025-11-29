@@ -23,10 +23,17 @@
     "paths": {
       "@/*": ["./src/modules/*"],
       "~/*": ["./src/*"]
-    }
+    },
+    "plugins": [
+      {
+        "name": "@styled/typescript-styled-plugin",
+        "lint": {
+          "validProperties": ["container-type"],
+        }
+      }
+    ]
   },
   "files": [],
-  "include": [],
   "references": [
     {
       "path": "./tsconfig.dev.json"

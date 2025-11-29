@@ -1,34 +1,35 @@
-import { ObjectRecordsPermissions } from 'twenty-shared/types';
+import { type ObjectsPermissions } from 'twenty-shared/types';
 import {
-  DeepPartial,
-  DeleteResult,
-  EntityTarget,
-  FindManyOptions,
-  FindOneOptions,
-  FindOptionsWhere,
-  InsertResult,
-  ObjectId,
-  ObjectLiteral,
-  QueryRunner,
-  RemoveOptions,
+  type DeepPartial,
+  type DeleteResult,
+  type EntityTarget,
+  type FindManyOptions,
+  type FindOneOptions,
+  type FindOptionsWhere,
+  type InsertResult,
+  type ObjectId,
+  type ObjectLiteral,
+  type QueryRunner,
+  type RemoveOptions,
   Repository,
-  SaveOptions,
-  UpdateResult,
+  type SaveOptions,
+  type UpdateResult,
 } from 'typeorm';
-import { PickKeysByType } from 'typeorm/common/PickKeysByType';
-import { QueryDeepPartialEntity } from 'typeorm/query-builder/QueryPartialEntity';
-import { UpsertOptions } from 'typeorm/repository/UpsertOptions';
+import { type PickKeysByType } from 'typeorm/common/PickKeysByType';
+import { type QueryDeepPartialEntity } from 'typeorm/query-builder/QueryPartialEntity';
+import { type UpsertOptions } from 'typeorm/repository/UpsertOptions';
 
-import { FeatureFlagMap } from 'src/engine/core-modules/feature-flag/interfaces/feature-flag-map.interface';
-import { WorkspaceInternalContext } from 'src/engine/twenty-orm/interfaces/workspace-internal-context.interface';
+import { type FeatureFlagMap } from 'src/engine/core-modules/feature-flag/interfaces/feature-flag-map.interface';
+import { type WorkspaceInternalContext } from 'src/engine/twenty-orm/interfaces/workspace-internal-context.interface';
 
-import { AuthContext } from 'src/engine/core-modules/auth/types/auth-context.type';
+import { type AuthContext } from 'src/engine/core-modules/auth/types/auth-context.type';
 import {
   PermissionsException,
   PermissionsExceptionCode,
 } from 'src/engine/metadata-modules/permissions/permissions.exception';
-import { QueryDeepPartialEntityWithRelationConnect } from 'src/engine/twenty-orm/entity-manager/types/query-deep-partial-entity-with-relation-connect.type';
-import { WorkspaceEntityManager } from 'src/engine/twenty-orm/entity-manager/workspace-entity-manager';
+import { type DeepPartialWithNestedRelationFields } from 'src/engine/twenty-orm/entity-manager/types/deep-partial-entity-with-nested-relation-fields.type';
+import { type QueryDeepPartialEntityWithNestedRelationFields } from 'src/engine/twenty-orm/entity-manager/types/query-deep-partial-entity-with-nested-relation-fields.type';
+import { type WorkspaceEntityManager } from 'src/engine/twenty-orm/entity-manager/workspace-entity-manager';
 import { WorkspaceSelectQueryBuilder } from 'src/engine/twenty-orm/repository/workspace-select-query-builder';
 import { formatData } from 'src/engine/twenty-orm/utils/format-data.util';
 import { getObjectMetadataFromEntityTarget } from 'src/engine/twenty-orm/utils/get-object-metadata-from-entity-target.util';
@@ -36,12 +37,16 @@ import { getObjectMetadataFromEntityTarget } from 'src/engine/twenty-orm/utils/g
 export class WorkspaceRepository<
   T extends ObjectLiteral,
 > extends Repository<T> {
-  private readonly internalContext: WorkspaceInternalContext;
+  private readonly _internalContext: WorkspaceInternalContext;
   private shouldBypassPermissionChecks: boolean;
   private featureFlagMap: FeatureFlagMap;
-  private objectRecordsPermissions?: ObjectRecordsPermissions;
+  public readonly objectRecordsPermissions?: ObjectsPermissions;
   private authContext?: AuthContext;
   declare manager: WorkspaceEntityManager;
+
+  get internalContext(): WorkspaceInternalContext {
+    return this._internalContext;
+  }
 
   constructor(
     internalContext: WorkspaceInternalContext,
@@ -49,12 +54,12 @@ export class WorkspaceRepository<
     manager: WorkspaceEntityManager,
     featureFlagMap: FeatureFlagMap,
     queryRunner?: QueryRunner,
-    objectRecordsPermissions?: ObjectRecordsPermissions,
+    objectRecordsPermissions?: ObjectsPermissions,
     shouldBypassPermissionChecks = false,
     authContext?: AuthContext,
   ) {
     super(target, manager, queryRunner);
-    this.internalContext = internalContext;
+    this._internalContext = internalContext;
     this.featureFlagMap = featureFlagMap;
     this.objectRecordsPermissions = objectRecordsPermissions;
     this.shouldBypassPermissionChecks = shouldBypassPermissionChecks;
@@ -78,9 +83,10 @@ export class WorkspaceRepository<
     return new WorkspaceSelectQueryBuilder(
       queryBuilder,
       this.objectRecordsPermissions,
-      this.internalContext,
+      this._internalContext,
       this.shouldBypassPermissionChecks,
-      this.authContext,
+      this.authContext ?? {},
+      this.featureFlagMap,
     );
   }
 
@@ -242,31 +248,31 @@ export class WorkspaceRepository<
   /**
    * SAVE METHODS
    */
-  override save<U extends DeepPartial<T>>(
+  override save<U extends DeepPartialWithNestedRelationFields<T>>(
     entities: U[],
     options: SaveOptions & { reload: false },
     entityManager?: WorkspaceEntityManager,
   ): Promise<T[]>;
 
-  override save<U extends DeepPartial<T>>(
+  override save<U extends DeepPartialWithNestedRelationFields<T>>(
     entities: U[],
     options?: SaveOptions,
     entityManager?: WorkspaceEntityManager,
   ): Promise<(U & T)[]>;
 
-  override save<U extends DeepPartial<T>>(
+  override save<U extends DeepPartialWithNestedRelationFields<T>>(
     entity: U,
     options: SaveOptions & { reload: false },
     entityManager?: WorkspaceEntityManager,
   ): Promise<T>;
 
-  override save<U extends DeepPartial<T>>(
+  override save<U extends DeepPartialWithNestedRelationFields<T>>(
     entity: U,
     options?: SaveOptions,
     entityManager?: WorkspaceEntityManager,
   ): Promise<U & T>;
 
-  override async save<U extends DeepPartial<T>>(
+  override async save<U extends DeepPartialWithNestedRelationFields<T>>(
     entityOrEntities: U | U[],
     options?: SaveOptions | (SaveOptions & { reload: false }),
     entityManager?: WorkspaceEntityManager,
@@ -346,6 +352,7 @@ export class WorkspaceRepository<
       | ObjectId[]
       | FindOptionsWhere<T>,
     entityManager?: WorkspaceEntityManager,
+    selectedColumns?: string[] | '*',
   ): Promise<DeleteResult> {
     const manager = entityManager || this.manager;
 
@@ -358,7 +365,12 @@ export class WorkspaceRepository<
       objectRecordsPermissions: this.objectRecordsPermissions,
     };
 
-    return manager.delete(this.target, criteria, permissionOptions);
+    return manager.delete(
+      this.target,
+      criteria,
+      permissionOptions,
+      selectedColumns,
+    );
   }
 
   override softRemove<U extends DeepPartial<T>>(
@@ -429,6 +441,7 @@ export class WorkspaceRepository<
       | ObjectId[]
       | FindOptionsWhere<T>,
     entityManager?: WorkspaceEntityManager,
+    selectedColumns?: string[],
   ): Promise<UpdateResult> {
     const manager = entityManager || this.manager;
 
@@ -441,7 +454,12 @@ export class WorkspaceRepository<
       objectRecordsPermissions: this.objectRecordsPermissions,
     };
 
-    return manager.softDelete(this.target, criteria, permissionOptions);
+    return manager.softDelete(
+      this.target,
+      criteria,
+      permissionOptions,
+      selectedColumns,
+    );
   }
 
   /**
@@ -515,6 +533,7 @@ export class WorkspaceRepository<
       | ObjectId[]
       | FindOptionsWhere<T>,
     entityManager?: WorkspaceEntityManager,
+    selectedColumns?: string[],
   ): Promise<UpdateResult> {
     const manager = entityManager || this.manager;
 
@@ -527,7 +546,12 @@ export class WorkspaceRepository<
       objectRecordsPermissions: this.objectRecordsPermissions,
     };
 
-    return manager.restore(this.target, criteria, permissionOptions);
+    return manager.restore(
+      this.target,
+      criteria,
+      permissionOptions,
+      selectedColumns,
+    );
   }
 
   /**
@@ -535,9 +559,10 @@ export class WorkspaceRepository<
    */
   override async insert(
     entity:
-      | QueryDeepPartialEntityWithRelationConnect<T>
-      | QueryDeepPartialEntityWithRelationConnect<T>[],
+      | QueryDeepPartialEntityWithNestedRelationFields<T>
+      | QueryDeepPartialEntityWithNestedRelationFields<T>[],
     entityManager?: WorkspaceEntityManager,
+    selectedColumns?: string[],
   ): Promise<InsertResult> {
     const manager = entityManager || this.manager;
 
@@ -546,7 +571,13 @@ export class WorkspaceRepository<
       objectRecordsPermissions: this.objectRecordsPermissions,
     };
 
-    return manager.insert(this.target, entity, permissionOptions);
+    return manager.insert(
+      this.target,
+      entity,
+      selectedColumns,
+      permissionOptions,
+      this.authContext,
+    );
   }
 
   /**
@@ -565,6 +596,7 @@ export class WorkspaceRepository<
       | FindOptionsWhere<T>,
     partialEntity: QueryDeepPartialEntity<T>,
     entityManager?: WorkspaceEntityManager,
+    selectedColumns?: string[],
   ): Promise<UpdateResult> {
     const manager = entityManager || this.manager;
 
@@ -582,13 +614,43 @@ export class WorkspaceRepository<
       criteria,
       partialEntity,
       permissionOptions,
+      selectedColumns,
     );
   }
 
+  // Experimental method to allow batch update and batch event emission
+  async updateMany(
+    inputs: {
+      criteria: string;
+      partialEntity: QueryDeepPartialEntity<T>;
+    }[],
+    entityManager?: WorkspaceEntityManager,
+    selectedColumns?: string[],
+  ): Promise<UpdateResult> {
+    const manager = entityManager || this.manager;
+
+    const permissionOptions = {
+      shouldBypassPermissionChecks: this.shouldBypassPermissionChecks,
+      objectRecordsPermissions: this.objectRecordsPermissions,
+    };
+
+    const results = await manager.updateMany(
+      this.target,
+      inputs,
+      permissionOptions,
+      selectedColumns,
+    );
+
+    return results;
+  }
+
   override async upsert(
-    entityOrEntities: QueryDeepPartialEntity<T> | QueryDeepPartialEntity<T>[],
+    entityOrEntities:
+      | QueryDeepPartialEntityWithNestedRelationFields<T>
+      | QueryDeepPartialEntityWithNestedRelationFields<T>[],
     conflictPathsOrOptions: string[] | UpsertOptions<T>,
     entityManager?: WorkspaceEntityManager,
+    selectedColumns: string[] = [],
   ): Promise<InsertResult> {
     const manager = entityManager || this.manager;
 
@@ -602,6 +664,7 @@ export class WorkspaceRepository<
       entityOrEntities,
       conflictPathsOrOptions,
       permissionOptions,
+      selectedColumns,
     );
 
     return {
@@ -777,6 +840,7 @@ export class WorkspaceRepository<
     propertyPath: string,
     value: number | string,
     entityManager?: WorkspaceEntityManager,
+    selectedColumns?: string[],
   ): Promise<UpdateResult> {
     const manager = entityManager || this.manager;
     const computedConditions = await this.transformOptions({
@@ -794,6 +858,7 @@ export class WorkspaceRepository<
       propertyPath,
       value,
       permissionOptions,
+      selectedColumns,
     );
   }
 
@@ -802,6 +867,7 @@ export class WorkspaceRepository<
     propertyPath: string,
     value: number | string,
     entityManager?: WorkspaceEntityManager,
+    selectedColumns?: string[],
   ): Promise<UpdateResult> {
     const manager = entityManager || this.manager;
     const computedConditions = await this.transformOptions({
@@ -819,6 +885,7 @@ export class WorkspaceRepository<
       propertyPath,
       value,
       permissionOptions,
+      selectedColumns,
     );
   }
 
@@ -881,7 +948,10 @@ export class WorkspaceRepository<
    * PRIVATE METHODS
    */
   private async getObjectMetadataFromTarget() {
-    return getObjectMetadataFromEntityTarget(this.target, this.internalContext);
+    return getObjectMetadataFromEntityTarget(
+      this.target,
+      this._internalContext,
+    );
   }
 
   private async transformOptions<
@@ -905,6 +975,10 @@ export class WorkspaceRepository<
   private async formatData<T>(data: T): Promise<T> {
     const objectMetadata = await this.getObjectMetadataFromTarget();
 
-    return formatData(data, objectMetadata) as T;
+    return formatData(
+      data,
+      objectMetadata,
+      this._internalContext.flatFieldMetadataMaps,
+    ) as T;
   }
 }

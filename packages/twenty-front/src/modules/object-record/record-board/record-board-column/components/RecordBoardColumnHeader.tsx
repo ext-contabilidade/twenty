@@ -6,11 +6,15 @@ import { RecordBoardContext } from '@/object-record/record-board/contexts/Record
 import { RecordBoardColumnDropdownMenu } from '@/object-record/record-board/record-board-column/components/RecordBoardColumnDropdownMenu';
 import { RecordBoardColumnHeaderAggregateDropdown } from '@/object-record/record-board/record-board-column/components/RecordBoardColumnHeaderAggregateDropdown';
 import { RecordBoardColumnContext } from '@/object-record/record-board/record-board-column/contexts/RecordBoardColumnContext';
-import { useAggregateRecordsForRecordBoardColumn } from '@/object-record/record-board/record-board-column/hooks/useAggregateRecordsForRecordBoardColumn';
+import { hasAnySoftDeleteFilterOnViewComponentSelector } from '@/object-record/record-filter/states/hasAnySoftDeleteFilterOnView';
 import { RecordGroupDefinitionType } from '@/object-record/record-group/types/RecordGroupDefinition';
+import { recordIndexAggregateDisplayLabelComponentState } from '@/object-record/record-index/states/recordIndexAggregateDisplayLabelComponentState';
+import { recordIndexAggregateDisplayValueForGroupValueComponentFamilyState } from '@/object-record/record-index/states/recordIndexAggregateDisplayValueForGroupValueComponentFamilyState';
 import { useCreateNewIndexRecord } from '@/object-record/record-table/hooks/useCreateNewIndexRecord';
 import { Dropdown } from '@/ui/layout/dropdown/components/Dropdown';
 import { useToggleDropdown } from '@/ui/layout/dropdown/hooks/useToggleDropdown';
+import { useRecoilComponentFamilyValue } from '@/ui/utilities/state/component-state/hooks/useRecoilComponentFamilyValue';
+import { useRecoilComponentValue } from '@/ui/utilities/state/component-state/hooks/useRecoilComponentValue';
 import { Tag } from 'twenty-ui/components';
 import { IconDotsVertical, IconPlus } from 'twenty-ui/display';
 import { LightIconButton } from 'twenty-ui/input';
@@ -66,13 +70,11 @@ const StyledTag = styled(Tag)`
 
 export const RecordBoardColumnHeader = () => {
   const { columnDefinition } = useContext(RecordBoardColumnContext);
+
   const [isHeaderHovered, setIsHeaderHovered] = useState(false);
 
   const { objectMetadataItem, selectFieldMetadataItem } =
     useContext(RecordBoardContext);
-
-  const { aggregateValue, aggregateLabel } =
-    useAggregateRecordsForRecordBoardColumn();
 
   const objectPermissions = useObjectPermissionsForObject(
     objectMetadataItem.id,
@@ -80,9 +82,23 @@ export const RecordBoardColumnHeader = () => {
 
   const hasObjectUpdatePermissions = objectPermissions.canUpdateObjectRecords;
 
+  const hasAnySoftDeleteFilterOnView = useRecoilComponentValue(
+    hasAnySoftDeleteFilterOnViewComponentSelector,
+  );
+
   const { createNewIndexRecord } = useCreateNewIndexRecord({
     objectMetadataItem: objectMetadataItem,
   });
+
+  const recordIndexAggregateDisplayValueForGroupValue =
+    useRecoilComponentFamilyValue(
+      recordIndexAggregateDisplayValueForGroupValueComponentFamilyState,
+      { groupValue: columnDefinition?.value ?? '' },
+    );
+
+  const recordIndexAggregateDisplayLabel = useRecoilComponentValue(
+    recordIndexAggregateDisplayLabelComponentState,
+  );
 
   const { toggleDropdown } = useToggleDropdown();
 
@@ -127,10 +143,10 @@ export const RecordBoardColumnHeader = () => {
             />
 
             <RecordBoardColumnHeaderAggregateDropdown
-              aggregateValue={aggregateValue}
+              aggregateValue={recordIndexAggregateDisplayValueForGroupValue}
               dropdownId={`record-board-column-aggregate-dropdown-${columnDefinition.id}`}
               objectMetadataItem={objectMetadataItem}
-              aggregateLabel={aggregateLabel}
+              aggregateLabel={recordIndexAggregateDisplayLabel}
             />
           </StyledLeftContainer>
           <StyledRightContainer>
@@ -145,18 +161,20 @@ export const RecordBoardColumnHeader = () => {
                     });
                   }}
                 />
-                {hasObjectUpdatePermissions && (
-                  <LightIconButton
-                    accent="tertiary"
-                    Icon={IconPlus}
-                    onClick={() => {
-                      createNewIndexRecord({
-                        position: 'first',
-                        [selectFieldMetadataItem.name]: columnDefinition.value,
-                      });
-                    }}
-                  />
-                )}
+                {hasObjectUpdatePermissions &&
+                  !hasAnySoftDeleteFilterOnView && (
+                    <LightIconButton
+                      accent="tertiary"
+                      Icon={IconPlus}
+                      onClick={() => {
+                        createNewIndexRecord({
+                          position: 'first',
+                          [selectFieldMetadataItem.name]:
+                            columnDefinition.value,
+                        });
+                      }}
+                    />
+                  )}
               </StyledHeaderActions>
             )}
           </StyledRightContainer>

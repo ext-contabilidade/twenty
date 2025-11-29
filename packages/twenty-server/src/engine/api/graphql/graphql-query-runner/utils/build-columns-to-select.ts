@@ -1,23 +1,32 @@
 import { FieldMetadataType } from 'twenty-shared/types';
+import { isDefined } from 'twenty-shared/utils';
 
 import { RelationType } from 'src/engine/metadata-modules/field-metadata/interfaces/relation-type.interface';
 
-import { InternalServerError } from 'src/engine/core-modules/graphql/utils/graphql-errors.util';
-import { ObjectMetadataItemWithFieldMaps } from 'src/engine/metadata-modules/types/object-metadata-item-with-field-maps';
-import { isFieldMetadataEntityOfType } from 'src/engine/utils/is-field-metadata-of-type.util';
+import { type FlatEntityMaps } from 'src/engine/metadata-modules/flat-entity/types/flat-entity-maps.type';
+import { findFlatEntityByIdInFlatEntityMapsOrThrow } from 'src/engine/metadata-modules/flat-entity/utils/find-flat-entity-by-id-in-flat-entity-maps-or-throw.util';
+import { type FlatFieldMetadata } from 'src/engine/metadata-modules/flat-field-metadata/types/flat-field-metadata.type';
+import { isFlatFieldMetadataOfType } from 'src/engine/metadata-modules/flat-field-metadata/utils/is-flat-field-metadata-of-type.util';
+import { type FlatObjectMetadata } from 'src/engine/metadata-modules/flat-object-metadata/types/flat-object-metadata.type';
 
 export const buildColumnsToSelect = ({
   select,
   relations,
-  objectMetadataItemWithFieldMaps,
+  flatObjectMetadata,
+  flatObjectMetadataMaps,
+  flatFieldMetadataMaps,
 }: {
   select: Record<string, unknown>;
   relations: Record<string, unknown>;
-  objectMetadataItemWithFieldMaps: ObjectMetadataItemWithFieldMaps;
+  flatObjectMetadata: FlatObjectMetadata;
+  flatObjectMetadataMaps: FlatEntityMaps<FlatObjectMetadata>;
+  flatFieldMetadataMaps: FlatEntityMaps<FlatFieldMetadata>;
 }) => {
   const requiredRelationColumns = getRequiredRelationColumns(
     relations,
-    objectMetadataItemWithFieldMaps,
+    flatObjectMetadata,
+    flatObjectMetadataMaps,
+    flatFieldMetadataMaps,
   );
 
   const fieldsToSelect: Record<string, boolean> = Object.entries(select)
@@ -35,37 +44,57 @@ export const buildColumnsToSelect = ({
 
 const getRequiredRelationColumns = (
   relations: Record<string, unknown>,
-  objectMetadataItem: ObjectMetadataItemWithFieldMaps,
+  flatObjectMetadata: FlatObjectMetadata,
+  flatObjectMetadataMaps: FlatEntityMaps<FlatObjectMetadata>,
+  flatFieldMetadataMaps: FlatEntityMaps<FlatFieldMetadata>,
 ): string[] => {
   const requiredColumns: string[] = [];
 
-  for (const [relationFieldName, _] of Object.entries(relations)) {
-    const fieldMetadataId = objectMetadataItem.fieldIdByName[relationFieldName];
+  for (const fieldId of flatObjectMetadata.fieldMetadataIds) {
+    const fieldMetadata = findFlatEntityByIdInFlatEntityMapsOrThrow({
+      flatEntityId: fieldId,
+      flatEntityMaps: flatFieldMetadataMaps,
+    });
 
-    if (!fieldMetadataId) {
-      throw new InternalServerError(
-        `Field metadata not found for relation field name: ${relationFieldName}`,
-      );
-    }
+    if (isFlatFieldMetadataOfType(fieldMetadata, FieldMetadataType.RELATION)) {
+      const relationValue = relations[fieldMetadata.name];
 
-    const fieldMetadata = objectMetadataItem.fieldsById[fieldMetadataId];
+      if (
+        !isDefined(relationValue) ||
+        !isDefined(fieldMetadata?.settings?.joinColumnName) ||
+        fieldMetadata.settings?.relationType !== RelationType.MANY_TO_ONE
+      ) {
+        continue;
+      }
 
-    if (!fieldMetadata) {
-      throw new InternalServerError(
-        `Field metadata not found for relation field name: ${relationFieldName}`,
-      );
-    }
-
-    if (
-      !isFieldMetadataEntityOfType(fieldMetadata, FieldMetadataType.RELATION)
-    ) {
-      continue;
+      requiredColumns.push(fieldMetadata.settings.joinColumnName);
     }
 
     if (
-      fieldMetadata.settings?.relationType === RelationType.MANY_TO_ONE &&
-      fieldMetadata.settings?.joinColumnName
+      isFlatFieldMetadataOfType(fieldMetadata, FieldMetadataType.MORPH_RELATION)
     ) {
+      const targetObjectMetadata = fieldMetadata.relationTargetObjectMetadataId
+        ? flatObjectMetadataMaps.byId[
+            fieldMetadata.relationTargetObjectMetadataId
+          ]
+        : undefined;
+
+      if (
+        !fieldMetadata.settings?.relationType ||
+        !isDefined(targetObjectMetadata)
+      ) {
+        continue;
+      }
+
+      const relationValue = relations[fieldMetadata.name];
+
+      if (
+        !isDefined(relationValue) ||
+        !isDefined(fieldMetadata?.settings?.joinColumnName)
+      ) {
+        continue;
+      }
+
       requiredColumns.push(fieldMetadata.settings.joinColumnName);
     }
   }

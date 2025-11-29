@@ -8,18 +8,22 @@ import { Process } from 'src/engine/core-modules/message-queue/decorators/proces
 import { Processor } from 'src/engine/core-modules/message-queue/decorators/processor.decorator';
 import { MessageQueue } from 'src/engine/core-modules/message-queue/message-queue.constants';
 import { ServerlessFunctionService } from 'src/engine/metadata-modules/serverless-function/serverless-function.service';
-import { WorkspaceRepository } from 'src/engine/twenty-orm/repository/workspace.repository';
+import { type WorkspaceRepository } from 'src/engine/twenty-orm/repository/workspace.repository';
 import { TwentyORMGlobalManager } from 'src/engine/twenty-orm/twenty-orm-global.manager';
 import {
+  WorkflowVersionStepException,
+  WorkflowVersionStepExceptionCode,
+} from 'src/modules/workflow/common/exceptions/workflow-version-step.exception';
+import {
   WorkflowVersionStatus,
-  WorkflowVersionWorkspaceEntity,
+  type WorkflowVersionWorkspaceEntity,
 } from 'src/modules/workflow/common/standard-objects/workflow-version.workspace-entity';
 import {
   WorkflowStatus,
-  WorkflowWorkspaceEntity,
+  type WorkflowWorkspaceEntity,
 } from 'src/modules/workflow/common/standard-objects/workflow.workspace-entity';
 import {
-  WorkflowAction,
+  type WorkflowAction,
   WorkflowActionType,
 } from 'src/modules/workflow/workflow-executor/workflow-actions/types/workflow-action.type';
 
@@ -128,6 +132,7 @@ export class WorkflowStatusesUpdateJob {
       where: {
         id: workflowId,
       },
+      withDeleted: true,
     });
 
     if (isEqual(newWorkflowStatuses, previousWorkflow.statuses)) {
@@ -176,6 +181,13 @@ export class WorkflowStatusesUpdateJob {
             );
 
           const newStepSettings = { ...step.settings };
+
+          if (!isDefined(serverlessFunction.latestVersion)) {
+            throw new WorkflowVersionStepException(
+              `Fail to publish serverless function ${serverlessFunction.id}. Latest version is null`,
+              WorkflowVersionStepExceptionCode.CODE_STEP_FAILURE,
+            );
+          }
 
           newStepSettings.input.serverlessFunctionVersion =
             serverlessFunction.latestVersion;

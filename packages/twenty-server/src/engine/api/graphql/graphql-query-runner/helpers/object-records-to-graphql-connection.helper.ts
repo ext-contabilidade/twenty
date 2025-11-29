@@ -1,11 +1,12 @@
-import { FieldMetadataType } from 'twenty-shared/types';
+import {
+  compositeTypeDefinitions,
+  FieldMetadataType,
+  type ObjectRecord,
+} from 'twenty-shared/types';
 import { isDefined } from 'twenty-shared/utils';
 
-import {
-  ObjectRecord,
-  ObjectRecordOrderBy,
-} from 'src/engine/api/graphql/workspace-query-builder/interfaces/object-record.interface';
-import { IConnection } from 'src/engine/api/graphql/workspace-query-runner/interfaces/connection.interface';
+import { type ObjectRecordOrderBy } from 'src/engine/api/graphql/workspace-query-builder/interfaces/object-record.interface';
+import { type IConnection } from 'src/engine/api/graphql/workspace-query-runner/interfaces/connection.interface';
 
 import { CONNECTION_MAX_DEPTH } from 'src/engine/api/graphql/graphql-query-runner/constants/connection-max-depth.constant';
 import {
@@ -14,21 +15,30 @@ import {
 } from 'src/engine/api/graphql/graphql-query-runner/errors/graphql-query-runner.exception';
 import { encodeCursor } from 'src/engine/api/graphql/graphql-query-runner/utils/cursors.util';
 import { getTargetObjectMetadataOrThrow } from 'src/engine/api/graphql/graphql-query-runner/utils/get-target-object-metadata.util';
-import { AggregationField } from 'src/engine/api/graphql/workspace-schema-builder/utils/get-available-aggregations-from-object-fields.util';
-import { compositeTypeDefinitions } from 'src/engine/metadata-modules/field-metadata/composite-types';
-import { FieldMetadataEntity } from 'src/engine/metadata-modules/field-metadata/field-metadata.entity';
+import { type AggregationField } from 'src/engine/api/graphql/workspace-schema-builder/utils/get-available-aggregations-from-object-fields.util';
 import { isCompositeFieldMetadataType } from 'src/engine/metadata-modules/field-metadata/utils/is-composite-field-metadata-type.util';
-import { ObjectMetadataMaps } from 'src/engine/metadata-modules/types/object-metadata-maps';
-import { getObjectMetadataMapItemByNameSingular } from 'src/engine/metadata-modules/utils/get-object-metadata-map-item-by-name-singular.util';
-import { CompositeFieldMetadataType } from 'src/engine/metadata-modules/workspace-migration/factories/composite-column-action.factory';
-import { isRelationFieldMetadataType } from 'src/engine/utils/is-relation-field-metadata-type.util';
+import { type FlatEntityMaps } from 'src/engine/metadata-modules/flat-entity/types/flat-entity-maps.type';
+import { findFlatEntityByIdInFlatEntityMapsOrThrow } from 'src/engine/metadata-modules/flat-entity/utils/find-flat-entity-by-id-in-flat-entity-maps-or-throw.util';
+import { type FlatFieldMetadata } from 'src/engine/metadata-modules/flat-field-metadata/types/flat-field-metadata.type';
+import { isMorphOrRelationFlatFieldMetadata } from 'src/engine/metadata-modules/flat-field-metadata/utils/is-morph-or-relation-flat-field-metadata.util';
+import { type FlatObjectMetadata } from 'src/engine/metadata-modules/flat-object-metadata/types/flat-object-metadata.type';
+import { type CompositeFieldMetadataType } from 'src/engine/metadata-modules/workspace-migration/factories/composite-column-action.factory';
 import { isPlainObject } from 'src/utils/is-plain-object';
 
+// TODO: Refacto-common - Rename CommonRecordsToGraphqlConnectionHelper
 export class ObjectRecordsToGraphqlConnectionHelper {
-  private objectMetadataMaps: ObjectMetadataMaps;
+  private flatObjectMetadataMaps: FlatEntityMaps<FlatObjectMetadata>;
+  private flatFieldMetadataMaps: FlatEntityMaps<FlatFieldMetadata>;
+  private objectIdByNameSingular: Record<string, string>;
 
-  constructor(objectMetadataMaps: ObjectMetadataMaps) {
-    this.objectMetadataMaps = objectMetadataMaps;
+  constructor(
+    flatObjectMetadataMaps: FlatEntityMaps<FlatObjectMetadata>,
+    flatFieldMetadataMaps: FlatEntityMaps<FlatFieldMetadata>,
+    objectIdByNameSingular: Record<string, string>,
+  ) {
+    this.flatObjectMetadataMaps = flatObjectMetadataMaps;
+    this.flatFieldMetadataMaps = flatFieldMetadataMaps;
+    this.objectIdByNameSingular = objectIdByNameSingular;
   }
 
   public createConnection<T extends ObjectRecord = ObjectRecord>({
@@ -152,39 +162,61 @@ export class ObjectRecordsToGraphqlConnectionHelper {
       );
     }
 
-    const objectMetadata = getObjectMetadataMapItemByNameSingular(
-      this.objectMetadataMaps,
-      objectName,
-    );
+    const objectMetadataId = this.objectIdByNameSingular[objectName];
 
-    if (!objectMetadata) {
-      throw new GraphqlQueryRunnerException(
-        `Object metadata not found for ${objectName}`,
-        GraphqlQueryRunnerExceptionCode.OBJECT_METADATA_NOT_FOUND,
-      );
-    }
+    const flatObjectMetadata = findFlatEntityByIdInFlatEntityMapsOrThrow({
+      flatEntityId: objectMetadataId,
+      flatEntityMaps: this.flatObjectMetadataMaps,
+    });
 
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const processedObjectRecord: Record<string, any> = {};
 
-    for (const [key, value] of Object.entries(objectRecord)) {
-      const fieldMetadataId = objectMetadata.fieldIdByName[key];
-      const fieldMetadata = objectMetadata.fieldsById[fieldMetadataId];
+    for (const fieldId of flatObjectMetadata.fieldMetadataIds) {
+      const fieldMetadata = findFlatEntityByIdInFlatEntityMapsOrThrow({
+        flatEntityId: fieldId,
+        flatEntityMaps: this.flatFieldMetadataMaps,
+      });
 
-      if (!fieldMetadata) {
-        processedObjectRecord[key] = value;
+      if (isCompositeFieldMetadataType(fieldMetadata.type)) {
+        const objectValue = objectRecord[fieldMetadata.name];
+
+        if (!isDefined(objectValue)) {
+          continue;
+        }
+        processedObjectRecord[fieldMetadata.name] = this.processCompositeField(
+          fieldMetadata,
+          objectValue,
+        );
         continue;
       }
 
-      if (isRelationFieldMetadataType(fieldMetadata.type)) {
-        if (Array.isArray(value)) {
-          const targetObjectMetadata = getTargetObjectMetadataOrThrow(
-            fieldMetadata,
-            this.objectMetadataMaps,
-          );
+      if (isMorphOrRelationFlatFieldMetadata(fieldMetadata)) {
+        const targetObjectMetadata =
+          this.flatObjectMetadataMaps.byId[
+            fieldMetadata.relationTargetObjectMetadataId
+          ];
 
-          processedObjectRecord[key] = this.createConnection({
-            objectRecords: value,
+        if (!isDefined(targetObjectMetadata)) {
+          continue;
+        }
+
+        const fieldMetadataNameWithId = `${fieldMetadata.name}Id`;
+
+        if (isDefined(objectRecord[fieldMetadataNameWithId])) {
+          processedObjectRecord[fieldMetadataNameWithId] =
+            objectRecord[fieldMetadataNameWithId];
+        }
+
+        const objectValue = objectRecord[fieldMetadata.name];
+
+        if (!isDefined(objectValue)) {
+          continue;
+        }
+
+        if (Array.isArray(objectValue)) {
+          processedObjectRecord[fieldMetadata.name] = this.createConnection({
+            objectRecords: objectValue,
             parentObjectRecord: objectRecord,
             objectRecordsAggregatedValues:
               objectRecordsAggregatedValues[fieldMetadata.name],
@@ -194,49 +226,51 @@ export class ObjectRecordsToGraphqlConnectionHelper {
             take,
             totalCount:
               objectRecordsAggregatedValues[fieldMetadata.name]?.totalCount ??
-              value.length,
+              objectValue.length,
             order,
             hasNextPage: false,
             hasPreviousPage: false,
             depth: depth + 1,
           });
-        } else if (isPlainObject(value)) {
-          const targetObjectMetadata = getTargetObjectMetadataOrThrow(
+        } else if (isPlainObject(objectValue)) {
+          const targetObjectMetadataOrThrow = getTargetObjectMetadataOrThrow(
             fieldMetadata,
-            this.objectMetadataMaps,
+            this.flatObjectMetadataMaps,
           );
 
-          processedObjectRecord[key] = this.processRecord({
-            objectRecord: value,
+          processedObjectRecord[fieldMetadata.name] = this.processRecord({
+            objectRecord: objectValue,
             objectRecordsAggregatedValues:
               objectRecordsAggregatedValues[fieldMetadata.name],
             selectedAggregatedFields:
               selectedAggregatedFields[fieldMetadata.name],
-            objectName: targetObjectMetadata.nameSingular,
+            objectName: targetObjectMetadataOrThrow.nameSingular,
             take,
             totalCount,
             order,
             depth: depth + 1,
           });
         }
-      } else if (isCompositeFieldMetadataType(fieldMetadata.type)) {
-        processedObjectRecord[key] = this.processCompositeField(
-          fieldMetadata,
-          value,
-        );
-      } else {
-        processedObjectRecord[key] = this.formatFieldValue(
-          value,
-          fieldMetadata.type,
-        );
+        continue;
       }
+
+      const objectValue = objectRecord[fieldMetadata.name];
+
+      if (!isDefined(objectValue)) {
+        continue;
+      }
+
+      processedObjectRecord[fieldMetadata.name] = this.formatFieldValue(
+        objectValue,
+        fieldMetadata.type,
+      );
     }
 
     return processedObjectRecord as T;
   }
 
   private processCompositeField(
-    fieldMetadata: FieldMetadataEntity,
+    fieldMetadata: FlatFieldMetadata,
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     fieldValue: any,
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -280,8 +314,6 @@ export class ObjectRecordsToGraphqlConnectionHelper {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   private formatFieldValue(value: any, fieldType: FieldMetadataType) {
     switch (fieldType) {
-      case FieldMetadataType.RAW_JSON:
-        return value ? JSON.stringify(value) : value;
       case FieldMetadataType.DATE:
       case FieldMetadataType.DATE_TIME:
         return value instanceof Date ? value.toISOString() : value;

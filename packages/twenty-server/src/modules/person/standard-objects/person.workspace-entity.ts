@@ -1,23 +1,27 @@
 import { msg } from '@lingui/core/macro';
-import { FieldMetadataType } from 'twenty-shared/types';
+import { STANDARD_OBJECT_IDS } from 'twenty-shared/metadata';
+import {
+  ActorMetadata,
+  EmailsMetadata,
+  FieldMetadataType,
+  PhonesMetadata,
+  RelationOnDeleteAction,
+  type FullNameMetadata,
+  type LinksMetadata,
+} from 'twenty-shared/types';
 
-import { RelationOnDeleteAction } from 'src/engine/metadata-modules/field-metadata/interfaces/relation-on-delete-action.interface';
 import { RelationType } from 'src/engine/metadata-modules/field-metadata/interfaces/relation-type.interface';
 import { Relation } from 'src/engine/workspace-manager/workspace-sync-metadata/interfaces/relation.interface';
 
-import { SEARCH_VECTOR_FIELD } from 'src/engine/metadata-modules/constants/search-vector-field.constants';
-import { ActorMetadata } from 'src/engine/metadata-modules/field-metadata/composite-types/actor.composite-type';
-import { EmailsMetadata } from 'src/engine/metadata-modules/field-metadata/composite-types/emails.composite-type';
-import { FullNameMetadata } from 'src/engine/metadata-modules/field-metadata/composite-types/full-name.composite-type';
-import { LinksMetadata } from 'src/engine/metadata-modules/field-metadata/composite-types/links.composite-type';
-import { PhonesMetadata } from 'src/engine/metadata-modules/field-metadata/composite-types/phones.composite-type';
 import { IndexType } from 'src/engine/metadata-modules/index-metadata/types/indexType.types';
+import { SEARCH_VECTOR_FIELD } from 'src/engine/metadata-modules/search-field-metadata/constants/search-vector-field.constants';
 import { BaseWorkspaceEntity } from 'src/engine/twenty-orm/base.workspace-entity';
 import { WorkspaceDuplicateCriteria } from 'src/engine/twenty-orm/decorators/workspace-duplicate-criteria.decorator';
 import { WorkspaceEntity } from 'src/engine/twenty-orm/decorators/workspace-entity.decorator';
 import { WorkspaceFieldIndex } from 'src/engine/twenty-orm/decorators/workspace-field-index.decorator';
 import { WorkspaceField } from 'src/engine/twenty-orm/decorators/workspace-field.decorator';
 import { WorkspaceIsDeprecated } from 'src/engine/twenty-orm/decorators/workspace-is-deprecated.decorator';
+import { WorkspaceIsFieldUIReadOnly } from 'src/engine/twenty-orm/decorators/workspace-is-field-ui-readonly.decorator';
 import { WorkspaceIsNullable } from 'src/engine/twenty-orm/decorators/workspace-is-nullable.decorator';
 import { WorkspaceIsSearchable } from 'src/engine/twenty-orm/decorators/workspace-is-searchable.decorator';
 import { WorkspaceIsSystem } from 'src/engine/twenty-orm/decorators/workspace-is-system.decorator';
@@ -26,10 +30,9 @@ import { WorkspaceJoinColumn } from 'src/engine/twenty-orm/decorators/workspace-
 import { WorkspaceRelation } from 'src/engine/twenty-orm/decorators/workspace-relation.decorator';
 import { PERSON_STANDARD_FIELD_IDS } from 'src/engine/workspace-manager/workspace-sync-metadata/constants/standard-field-ids';
 import { STANDARD_OBJECT_ICONS } from 'src/engine/workspace-manager/workspace-sync-metadata/constants/standard-object-icons';
-import { STANDARD_OBJECT_IDS } from 'src/engine/workspace-manager/workspace-sync-metadata/constants/standard-object-ids';
 import {
-  FieldTypeAndNameMetadata,
   getTsVectorColumnExpressionFromFields,
+  type FieldTypeAndNameMetadata,
 } from 'src/engine/workspace-manager/workspace-sync-metadata/utils/get-ts-vector-column-expression.util';
 import { AttachmentWorkspaceEntity } from 'src/modules/attachment/standard-objects/attachment.workspace-entity';
 import { CalendarEventParticipantWorkspaceEntity } from 'src/modules/calendar/common/standard-objects/calendar-event-participant.workspace-entity';
@@ -43,16 +46,19 @@ import { TimelineActivityWorkspaceEntity } from 'src/modules/timeline/standard-o
 
 const NAME_FIELD_NAME = 'name';
 const EMAILS_FIELD_NAME = 'emails';
+const PHONES_FIELD_NAME = 'phones';
 const JOB_TITLE_FIELD_NAME = 'jobTitle';
 
 export const SEARCH_FIELDS_FOR_PERSON: FieldTypeAndNameMetadata[] = [
   { name: NAME_FIELD_NAME, type: FieldMetadataType.FULL_NAME },
   { name: EMAILS_FIELD_NAME, type: FieldMetadataType.EMAILS },
+  { name: PHONES_FIELD_NAME, type: FieldMetadataType.PHONES },
   { name: JOB_TITLE_FIELD_NAME, type: FieldMetadataType.TEXT },
 ];
 
 @WorkspaceEntity({
   standardId: STANDARD_OBJECT_IDS.person,
+
   namePlural: 'people',
   labelSingular: msg`Person`,
   labelPlural: msg`People`,
@@ -85,8 +91,12 @@ export class PersonWorkspaceEntity extends BaseWorkspaceEntity {
     label: msg`Emails`,
     description: msg`Contact’s Emails`,
     icon: 'IconMail',
+    settings: {
+      maxNumberOfValues: 1,
+    },
   })
   @WorkspaceIsUnique()
+  @WorkspaceIsNullable()
   emails: EmailsMetadata;
 
   @WorkspaceField({
@@ -116,7 +126,8 @@ export class PersonWorkspaceEntity extends BaseWorkspaceEntity {
     description: msg`Contact’s job title`,
     icon: 'IconBriefcase',
   })
-  jobTitle: string;
+  @WorkspaceIsNullable()
+  jobTitle: string | null;
 
   @WorkspaceField({
     standardId: PERSON_STANDARD_FIELD_IDS.phone,
@@ -126,7 +137,8 @@ export class PersonWorkspaceEntity extends BaseWorkspaceEntity {
     icon: 'IconPhone',
   })
   @WorkspaceIsDeprecated()
-  phone: string;
+  @WorkspaceIsNullable()
+  phone: string | null;
 
   @WorkspaceField({
     standardId: PERSON_STANDARD_FIELD_IDS.phones,
@@ -134,7 +146,11 @@ export class PersonWorkspaceEntity extends BaseWorkspaceEntity {
     label: msg`Phones`,
     description: msg`Contact’s phone numbers`,
     icon: 'IconPhone',
+    settings: {
+      maxNumberOfValues: 1,
+    },
   })
+  @WorkspaceIsNullable()
   phones: PhonesMetadata;
 
   @WorkspaceField({
@@ -144,7 +160,8 @@ export class PersonWorkspaceEntity extends BaseWorkspaceEntity {
     description: msg`Contact’s city`,
     icon: 'IconMap',
   })
-  city: string;
+  @WorkspaceIsNullable()
+  city: string | null;
 
   @WorkspaceField({
     standardId: PERSON_STANDARD_FIELD_IDS.avatarUrl,
@@ -154,7 +171,8 @@ export class PersonWorkspaceEntity extends BaseWorkspaceEntity {
     icon: 'IconFileUpload',
   })
   @WorkspaceIsSystem()
-  avatarUrl: string;
+  @WorkspaceIsNullable()
+  avatarUrl: string | null;
 
   @WorkspaceField({
     standardId: PERSON_STANDARD_FIELD_IDS.position,
@@ -174,6 +192,7 @@ export class PersonWorkspaceEntity extends BaseWorkspaceEntity {
     icon: 'IconCreativeCommonsSa',
     description: msg`The creator of the record`,
   })
+  @WorkspaceIsFieldUIReadOnly()
   createdBy: ActorMetadata;
 
   // Relations
@@ -214,6 +233,7 @@ export class PersonWorkspaceEntity extends BaseWorkspaceEntity {
     inverseSideTarget: () => TaskTargetWorkspaceEntity,
     onDelete: RelationOnDeleteAction.CASCADE,
   })
+  @WorkspaceIsFieldUIReadOnly()
   taskTargets: Relation<TaskTargetWorkspaceEntity[]>;
 
   @WorkspaceRelation({
@@ -225,6 +245,7 @@ export class PersonWorkspaceEntity extends BaseWorkspaceEntity {
     inverseSideTarget: () => NoteTargetWorkspaceEntity,
     onDelete: RelationOnDeleteAction.CASCADE,
   })
+  @WorkspaceIsFieldUIReadOnly()
   noteTargets: Relation<NoteTargetWorkspaceEntity[]>;
 
   @WorkspaceRelation({

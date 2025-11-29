@@ -1,4 +1,5 @@
-import { ViewFilterOperand } from './ViewFilterOperand';
+import { type ViewFilterOperandDeprecated } from '@/types/ViewFilterOperandDeprecated';
+import { type ViewFilterOperand } from './ViewFilterOperand';
 
 export enum StepLogicalOperator {
   AND = 'AND',
@@ -15,11 +16,25 @@ export type StepFilterGroup = {
 export type StepFilter = {
   id: string;
   type: string;
-  label: string;
-  value: string;
-  operand: ViewFilterOperand;
-  displayValue: string;
-  stepFilterGroupId: string;
   stepOutputKey: string;
+  operand: ViewFilterOperand;
+  value: string;
+  stepFilterGroupId: string;
   positionInStepFilterGroup?: number;
+  fieldMetadataId?: string;
+  compositeFieldSubFieldName?: string;
+  isFullRecord?: boolean;
+};
+
+export type StepFilterWithPotentiallyDeprecatedOperand = {
+  id: string;
+  type: string;
+  stepOutputKey: string;
+  operand: ViewFilterOperand | ViewFilterOperandDeprecated;
+  value: string;
+  stepFilterGroupId: string;
+  positionInStepFilterGroup?: number;
+  fieldMetadataId?: string;
+  compositeFieldSubFieldName?: string;
+  isFullRecord?: boolean;
 };

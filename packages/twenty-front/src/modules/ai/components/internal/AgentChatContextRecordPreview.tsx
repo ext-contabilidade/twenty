@@ -1,14 +1,14 @@
-import { useFindManyRecordsSelectedInContextStore } from '@/context-store/hooks/useFindManyRecordsSelectedInContextStore';
-import { useObjectMetadataItemById } from '@/object-metadata/hooks/useObjectMetadataItemById';
-import { useRecoilComponentStateV2 } from '@/ui/utilities/state/component-state/hooks/useRecoilComponentStateV2';
 import { isAgentChatCurrentContextActiveState } from '@/ai/states/isAgentChatCurrentContextActiveState';
-import { MultipleAvatarChip } from 'twenty-ui/components';
-import { t } from '@lingui/core/macro';
-import { IconReload, IconX } from 'twenty-ui/display';
 import { CommandMenuContextRecordChipAvatars } from '@/command-menu/components/CommandMenuContextRecordChipAvatars';
 import { getSelectedRecordsContextText } from '@/command-menu/utils/getRecordContextText';
-import styled from '@emotion/styled';
+import { useFindManyRecordsSelectedInContextStore } from '@/context-store/hooks/useFindManyRecordsSelectedInContextStore';
+import { useObjectMetadataItemById } from '@/object-metadata/hooks/useObjectMetadataItemById';
 import { useTheme } from '@emotion/react';
+import styled from '@emotion/styled';
+import { t } from '@lingui/core/macro';
+import { useRecoilState } from 'recoil';
+import { MultipleAvatarChip } from 'twenty-ui/components';
+import { IconReload, IconX } from 'twenty-ui/display';
 
 const StyledRightIconContainer = styled.div`
   display: flex;
@@ -24,10 +24,8 @@ const StyledChipWrapper = styled.div<{ isActive: boolean }>`
 `;
 
 export const AgentChatContextRecordPreview = ({
-  agentId,
   contextStoreCurrentObjectMetadataItemId,
 }: {
-  agentId: string;
   contextStoreCurrentObjectMetadataItemId: string;
 }) => {
   const theme = useTheme();
@@ -41,7 +39,7 @@ export const AgentChatContextRecordPreview = ({
   });
 
   const [isAgentChatCurrentContextActive, setIsAgentChatCurrentContextActive] =
-    useRecoilComponentStateV2(isAgentChatCurrentContextActiveState, agentId);
+    useRecoilState(isAgentChatCurrentContextActiveState);
 
   const Avatars = records.map((record) => (
     // @todo move this components to be less specific. (Outside of CommandMenu

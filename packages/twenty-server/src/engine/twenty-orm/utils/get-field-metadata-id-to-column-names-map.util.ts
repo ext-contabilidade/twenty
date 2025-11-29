@@ -1,29 +1,30 @@
-import { InternalServerError } from 'src/engine/core-modules/graphql/utils/graphql-errors.util';
-import { compositeTypeDefinitions } from 'src/engine/metadata-modules/field-metadata/composite-types';
+import { type CompositeType } from 'twenty-shared/types';
+
+import { type FlatEntityMaps } from 'src/engine/metadata-modules/flat-entity/types/flat-entity-maps.type';
+import { type FlatFieldMetadata } from 'src/engine/metadata-modules/flat-field-metadata/types/flat-field-metadata.type';
+import { type FlatObjectMetadata } from 'src/engine/metadata-modules/flat-object-metadata/types/flat-object-metadata.type';
+import { computeCompositeColumnName } from 'src/engine/metadata-modules/field-metadata/utils/compute-column-name.util';
 import {
-  computeColumnName,
-  computeCompositeColumnName,
-} from 'src/engine/metadata-modules/field-metadata/utils/compute-column-name.util';
-import { isCompositeFieldMetadataType } from 'src/engine/metadata-modules/field-metadata/utils/is-composite-field-metadata-type.util';
-import { ObjectMetadataItemWithFieldMaps } from 'src/engine/metadata-modules/types/object-metadata-item-with-field-maps';
+  type ColumnNameProcessor,
+  processFieldMetadataForColumnNameMapping,
+} from 'src/engine/twenty-orm/utils/process-field-metadata-for-column-name-mapping.util';
 
 export function getFieldMetadataIdToColumnNamesMap(
-  objectMetadataItemWithFieldMaps: ObjectMetadataItemWithFieldMaps,
+  flatObjectMetadata: FlatObjectMetadata,
+  flatFieldMetadataMaps: FlatEntityMaps<FlatFieldMetadata>,
 ) {
   const fieldMetadataToColumnNamesMap = new Map<string, string[]>();
 
-  for (const [fieldMetadataId, fieldMetadata] of Object.entries(
-    objectMetadataItemWithFieldMaps.fieldsById,
-  )) {
-    if (isCompositeFieldMetadataType(fieldMetadata.type)) {
-      const compositeType = compositeTypeDefinitions.get(fieldMetadata.type);
-
-      if (!compositeType) {
-        throw new InternalServerError(
-          `Composite type not found for field metadata type ${fieldMetadata.type}`,
-        );
-      }
-
+  const processor: ColumnNameProcessor = {
+    processCompositeField: ({
+      fieldMetadataId,
+      fieldMetadata,
+      compositeType,
+    }: {
+      fieldMetadataId: string;
+      fieldMetadata: FlatFieldMetadata;
+      compositeType: CompositeType;
+    }) => {
       compositeType.properties.forEach((compositeProperty) => {
         const columnName = computeCompositeColumnName(
           fieldMetadata.name,
@@ -38,12 +39,33 @@ export function getFieldMetadataIdToColumnNamesMap(
           columnName,
         ]);
       });
-    } else {
-      const columnName = computeColumnName(fieldMetadata);
-
+    },
+    processRelationField: ({
+      fieldMetadataId,
+      joinColumnName,
+    }: {
+      fieldMetadataId: string;
+      joinColumnName: string;
+    }) => {
+      fieldMetadataToColumnNamesMap.set(fieldMetadataId, [joinColumnName]);
+    },
+    processSimpleField: ({
+      fieldMetadataId,
+      columnName,
+    }: {
+      fieldMetadataId: string;
+      fieldMetadata: FlatFieldMetadata;
+      columnName: string;
+    }) => {
       fieldMetadataToColumnNamesMap.set(fieldMetadataId, [columnName]);
-    }
-  }
+    },
+  };
+
+  processFieldMetadataForColumnNameMapping(
+    flatObjectMetadata,
+    flatFieldMetadataMaps,
+    processor,
+  );
 
   return fieldMetadataToColumnNamesMap;
 }

@@ -1,11 +1,9 @@
-import {
-  TextInputV2,
-  TextInputV2Size,
-} from '@/ui/input/components/TextInputV2';
+import { TextInput, type TextInputSize } from '@/ui/input/components/TextInput';
 import { useRef, useState } from 'react';
 import { isDefined } from 'twenty-shared/utils';
 
-import { useRegisterInputEvents } from '@/object-record/record-field/meta-types/input/hooks/useRegisterInputEvents';
+import { useRegisterInputEvents } from '@/object-record/record-field/ui/meta-types/input/hooks/useRegisterInputEvents';
+import { TitleInputAutoOpenEffect } from '@/ui/input/components/TitleInputAutoOpenEffect';
 import { usePushFocusItemToFocusStack } from '@/ui/utilities/focus/hooks/usePushFocusItemToFocusStack';
 import { useRemoveFocusItemFromFocusStackById } from '@/ui/utilities/focus/hooks/useRemoveFocusItemFromFocusStackById';
 import { FocusComponentType } from '@/ui/utilities/focus/types/FocusComponentType';
@@ -22,15 +20,17 @@ type InputProps = {
   onClickOutside?: () => void;
   onTab?: () => void;
   onShiftTab?: () => void;
-  sizeVariant?: TextInputV2Size;
+  sizeVariant?: TextInputSize;
 };
 
 export type TitleInputProps = {
   disabled?: boolean;
+  shouldOpen?: boolean;
+  onOpen?: () => void;
 } & InputProps;
 
 const StyledDiv = styled.div<{
-  sizeVariant: TextInputV2Size;
+  sizeVariant: TextInputSize;
   disabled?: boolean;
 }>`
   background: inherit;
@@ -116,7 +116,7 @@ const Input = ({
   });
 
   return (
-    <TextInputV2
+    <TextInput
       ref={wrapperRef}
       autoGrow
       sizeVariant={sizeVariant}
@@ -145,6 +145,8 @@ export const TitleInput = ({
   onClickOutside,
   onTab,
   onShiftTab,
+  shouldOpen,
+  onOpen,
 }: TitleInputProps) => {
   const [isOpened, setIsOpened] = useState(false);
 
@@ -152,6 +154,14 @@ export const TitleInput = ({
 
   return (
     <>
+      <TitleInputAutoOpenEffect
+        shouldOpen={shouldOpen}
+        isOpened={isOpened}
+        disabled={disabled}
+        instanceId={instanceId}
+        onOpen={onOpen}
+        setIsOpened={setIsOpened}
+      />
       {isOpened ? (
         <Input
           instanceId={instanceId}

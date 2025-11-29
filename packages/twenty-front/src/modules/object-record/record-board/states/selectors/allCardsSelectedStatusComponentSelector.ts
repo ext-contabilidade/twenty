@@ -1,18 +1,18 @@
 import { RecordBoardComponentInstanceContext } from '@/object-record/record-board/states/contexts/RecordBoardComponentInstanceContext';
 import { recordBoardSelectedRecordIdsComponentSelector } from '@/object-record/record-board/states/selectors/recordBoardSelectedRecordIdsComponentSelector';
-import { recordIndexAllRecordIdsComponentSelector } from '@/object-record/record-index/states/selectors/recordIndexAllRecordIdsComponentSelector';
-import { AllRowsSelectedStatus } from '@/object-record/record-table/types/AllRowSelectedStatus';
-import { createComponentSelectorV2 } from '@/ui/utilities/state/component-state/utils/createComponentSelectorV2';
+import { allRecordIdsOfAllRecordGroupsComponentSelector } from '@/object-record/record-index/states/selectors/allRecordIdsOfAllRecordGroupsComponentSelector';
+import { type AllRowsSelectedStatus } from '@/object-record/record-table/types/AllRowSelectedStatus';
+import { createComponentSelector } from '@/ui/utilities/state/component-state/utils/createComponentSelector';
 
 export const allCardsSelectedStatusComponentSelector =
-  createComponentSelectorV2<AllRowsSelectedStatus>({
+  createComponentSelector<AllRowsSelectedStatus>({
     key: 'allCardsSelectedStatusComponentSelector',
     componentInstanceContext: RecordBoardComponentInstanceContext,
     get:
       ({ instanceId }) =>
       ({ get }) => {
         const allRecordIds = get(
-          recordIndexAllRecordIdsComponentSelector.selectorFamily({
+          allRecordIdsOfAllRecordGroupsComponentSelector.selectorFamily({
             instanceId,
           }),
         );

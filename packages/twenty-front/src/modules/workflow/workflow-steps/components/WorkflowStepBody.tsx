@@ -1,3 +1,6 @@
+import { AppErrorBoundary } from '@/error-handler/components/AppErrorBoundary';
+import { AppErrorDisplay } from '@/error-handler/components/internal/AppErrorDisplay';
+import { type AppErrorDisplayProps } from '@/error-handler/types/AppErrorDisplayProps';
 import styled from '@emotion/styled';
 
 const StyledWorkflowStepBody = styled.div`
@@ -12,4 +15,31 @@ const StyledWorkflowStepBody = styled.div`
   row-gap: ${({ theme }) => theme.spacing(4)};
 `;
 
-export { StyledWorkflowStepBody as WorkflowStepBody };
+export const WorkflowStepBody = ({
+  children,
+  className,
+}: {
+  children: React.ReactNode;
+  className?: string;
+}) => {
+  return (
+    <StyledWorkflowStepBody className={className}>
+      <AppErrorBoundary
+        resetOnLocationChange={true}
+        FallbackComponent={({
+          error,
+          resetErrorBoundary,
+          title,
+        }: AppErrorDisplayProps) => (
+          <AppErrorDisplay
+            error={error}
+            resetErrorBoundary={resetErrorBoundary}
+            title={title}
+          />
+        )}
+      >
+        {children}
+      </AppErrorBoundary>
+    </StyledWorkflowStepBody>
+  );
+};
